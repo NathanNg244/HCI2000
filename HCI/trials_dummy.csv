@@ -1,0 +1,17 @@
+participant_id,trial_number,condition,route_id,trial_position,elapsed_time_sec,combat_cutscene_pause_sec,completed,wayfinding_errors,lost_episodes,map_openings,total_map_open_duration_sec,objective_board_openings,compass_use_notes
+P01,1,Explicit,Route_A,1,205,25,True,1,0,2,38,1,Used compass briefly
+P01,2,Implicit,Route_B,2,292,32,True,3,2,5,104,4,Checked compass several times
+P02,1,Implicit,Route_A,1,310,40,True,2,1,5,115,3,Relied on compass
+P02,2,Explicit,Route_B,2,225,20,True,0,0,2,31,1,Used compass briefly
+P03,1,Explicit,Route_B,1,188,18,True,0,0,1,19,1,Followed compass
+P03,2,Implicit,Route_A,2,275,25,True,2,1,4,92,3,Checked compass several times
+P04,1,Implicit,Route_B,1,325,35,True,3,2,6,132,4,Relied on compass
+P04,2,Explicit,Route_A,2,215,25,True,1,0,2,34,1,Followed compass
+P05,1,Explicit,Route_A,1,230,30,True,1,0,2,42,2,Used compass briefly
+P05,2,Implicit,Route_B,2,340,40,True,3,2,6,141,4,Frequently checked compass
+P06,1,Implicit,Route_A,1,510,30,False,4,3,8,190,6,Relied on compass; still unsure
+P06,2,Explicit,Route_B,2,250,30,True,1,0,3,48,2,Followed compass
+P07,1,Explicit,Route_B,1,195,15,True,0,0,1,22,1,Followed compass
+P07,2,Implicit,Route_A,2,285,25,True,2,1,4,98,3,Checked compass several times
+P08,1,Implicit,Route_B,1,300,30,True,2,1,5,108,3,Relied on compass
+P08,2,Explicit,Route_A,2,220,20,True,1,0,2,35,1,Used compass briefly
