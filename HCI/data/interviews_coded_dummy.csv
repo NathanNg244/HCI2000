@@ -1,0 +1,270 @@
+segment_id,participant_id,condition,interview_stage,code_family,code,excerpt
+S001,P01,Explicit,trial,source,marker,[dummy] followed the marker
+S002,P01,Explicit,trial,source,marker,[dummy] followed the marker
+S003,P01,Explicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S004,P01,Explicit,final,experience,more_effortful,[dummy] had to think harder
+S005,P01,Implicit,trial,source,marker,[dummy] followed the marker
+S006,P01,Implicit,trial,source,map,[dummy] opened the map to check
+S007,P01,Implicit,trial,source,map,[dummy] opened the map to check
+S008,P01,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S009,P01,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S010,P01,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S011,P01,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S012,P01,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S013,P01,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S014,P02,Explicit,trial,source,marker,[dummy] followed the marker
+S015,P02,Explicit,trial,source,marker,[dummy] followed the marker
+S016,P02,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S017,P02,Implicit,trial,source,map,[dummy] opened the map to check
+S018,P02,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S019,P02,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S020,P02,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S021,P02,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S022,P02,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S023,P02,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S024,P02,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S025,P02,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S026,P02,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S027,P02,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S028,P02,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S029,P02,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S030,P02,Implicit,final,experience,frustrating,[dummy] got frustrated
+S031,P03,Explicit,trial,source,marker,[dummy] followed the marker
+S032,P03,Explicit,trial,source,marker,[dummy] followed the marker
+S033,P03,Explicit,trial,source,compass,[dummy] glanced at the compass
+S034,P03,Explicit,trial,source,compass,[dummy] glanced at the compass
+S035,P03,Explicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S036,P03,Explicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S037,P03,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S038,P03,Explicit,final,experience,more_effortful,[dummy] had to think harder
+S039,P03,Implicit,trial,source,compass,[dummy] glanced at the compass
+S040,P03,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S041,P03,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S042,P03,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S043,P03,Implicit,trial,difficulty,missed_branch,[dummy] took the wrong branch
+S044,P03,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S045,P03,Implicit,final,experience,frustrating,[dummy] got frustrated
+S046,P04,Explicit,trial,source,marker,[dummy] followed the marker
+S047,P04,Explicit,trial,source,marker,[dummy] followed the marker
+S048,P04,Explicit,trial,source,map,[dummy] opened the map to check
+S049,P04,Explicit,trial,source,map,[dummy] opened the map to check
+S050,P04,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S051,P04,Implicit,trial,source,compass,[dummy] glanced at the compass
+S052,P04,Implicit,trial,source,compass,[dummy] glanced at the compass
+S053,P04,Implicit,trial,source,map,[dummy] opened the map to check
+S054,P04,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S055,P04,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S056,P04,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S057,P04,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S058,P04,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S059,P04,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S060,P04,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S061,P04,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S062,P04,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S063,P05,Explicit,trial,source,marker,[dummy] followed the marker
+S064,P05,Explicit,trial,source,compass,[dummy] glanced at the compass
+S065,P05,Explicit,trial,source,map,[dummy] opened the map to check
+S066,P05,Explicit,trial,source,map,[dummy] opened the map to check
+S067,P05,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S068,P05,Explicit,final,experience,more_effortful,[dummy] had to think harder
+S069,P05,Explicit,final,experience,more_immersive,[dummy] felt more immersed
+S070,P05,Implicit,trial,source,marker,[dummy] followed the marker
+S071,P05,Implicit,trial,source,marker,[dummy] followed the marker
+S072,P05,Implicit,trial,source,compass,[dummy] glanced at the compass
+S073,P05,Implicit,trial,source,map,[dummy] opened the map to check
+S074,P05,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S075,P05,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S076,P05,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S077,P05,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S078,P05,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S079,P05,Implicit,trial,difficulty,missed_branch,[dummy] took the wrong branch
+S080,P05,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S081,P05,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S082,P06,Explicit,trial,source,marker,[dummy] followed the marker
+S083,P06,Explicit,trial,source,marker,[dummy] followed the marker
+S084,P06,Explicit,trial,source,compass,[dummy] glanced at the compass
+S085,P06,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S086,P06,Implicit,trial,source,marker,[dummy] followed the marker
+S087,P06,Implicit,trial,source,marker,[dummy] followed the marker
+S088,P06,Implicit,trial,source,compass,[dummy] glanced at the compass
+S089,P06,Implicit,trial,source,map,[dummy] opened the map to check
+S090,P06,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S091,P06,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S092,P06,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S093,P06,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S094,P06,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S095,P06,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S096,P06,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S097,P06,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S098,P06,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S099,P06,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S100,P07,Explicit,trial,source,marker,[dummy] followed the marker
+S101,P07,Explicit,trial,source,marker,[dummy] followed the marker
+S102,P07,Explicit,trial,source,character_clues,[dummy] relied on what the character said
+S103,P07,Explicit,trial,source,character_clues,[dummy] relied on what the character said
+S104,P07,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S105,P07,Implicit,trial,source,map,[dummy] opened the map to check
+S106,P07,Implicit,trial,source,map,[dummy] opened the map to check
+S107,P07,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S108,P07,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S109,P07,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S110,P07,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S111,P07,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S112,P07,Implicit,final,experience,more_confident,[dummy] felt sure of the way
+S113,P07,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S114,P07,Implicit,final,experience,frustrating,[dummy] got frustrated
+S115,P08,Explicit,trial,source,marker,[dummy] followed the marker
+S116,P08,Explicit,trial,source,clue_text,[dummy] re-read the clue text
+S117,P08,Explicit,trial,source,clue_text,[dummy] re-read the clue text
+S118,P08,Explicit,final,experience,more_effortful,[dummy] had to think harder
+S119,P08,Explicit,final,experience,more_immersive,[dummy] felt more immersed
+S120,P08,Implicit,trial,source,marker,[dummy] followed the marker
+S121,P08,Implicit,trial,source,compass,[dummy] glanced at the compass
+S122,P08,Implicit,trial,source,compass,[dummy] glanced at the compass
+S123,P08,Implicit,trial,source,map,[dummy] opened the map to check
+S124,P08,Implicit,trial,source,map,[dummy] opened the map to check
+S125,P08,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S126,P08,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S127,P08,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S128,P08,Implicit,trial,difficulty,missed_branch,[dummy] took the wrong branch
+S129,P08,Implicit,final,experience,more_confident,[dummy] felt sure of the way
+S130,P08,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S131,P08,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S132,P09,Explicit,trial,source,marker,[dummy] followed the marker
+S133,P09,Explicit,trial,source,compass,[dummy] glanced at the compass
+S134,P09,Explicit,trial,source,compass,[dummy] glanced at the compass
+S135,P09,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S136,P09,Explicit,final,experience,more_effortful,[dummy] had to think harder
+S137,P09,Explicit,final,experience,more_immersive,[dummy] felt more immersed
+S138,P09,Implicit,trial,source,marker,[dummy] followed the marker
+S139,P09,Implicit,trial,source,compass,[dummy] glanced at the compass
+S140,P09,Implicit,trial,source,compass,[dummy] glanced at the compass
+S141,P09,Implicit,trial,source,map,[dummy] opened the map to check
+S142,P09,Implicit,trial,source,map,[dummy] opened the map to check
+S143,P09,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S144,P09,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S145,P09,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S146,P09,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S147,P09,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S148,P09,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S149,P09,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S150,P09,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S151,P10,Explicit,trial,source,marker,[dummy] followed the marker
+S152,P10,Explicit,trial,source,marker,[dummy] followed the marker
+S153,P10,Explicit,trial,source,compass,[dummy] glanced at the compass
+S154,P10,Implicit,trial,source,marker,[dummy] followed the marker
+S155,P10,Implicit,trial,source,compass,[dummy] glanced at the compass
+S156,P10,Implicit,trial,source,map,[dummy] opened the map to check
+S157,P10,Implicit,trial,source,map,[dummy] opened the map to check
+S158,P10,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S159,P10,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S160,P10,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S161,P10,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S162,P10,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S163,P10,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S164,P10,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S165,P10,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S166,P11,Explicit,trial,source,marker,[dummy] followed the marker
+S167,P11,Explicit,trial,source,marker,[dummy] followed the marker
+S168,P11,Explicit,trial,source,map,[dummy] opened the map to check
+S169,P11,Explicit,trial,source,map,[dummy] opened the map to check
+S170,P11,Explicit,trial,source,lighting_colour,[dummy] noticed lighting
+S171,P11,Explicit,trial,source,lighting_colour,[dummy] noticed lighting
+S172,P11,Explicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S173,P11,Explicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S174,P11,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S175,P11,Explicit,final,experience,frustrating,[dummy] got frustrated
+S176,P11,Implicit,trial,source,marker,[dummy] followed the marker
+S177,P11,Implicit,trial,source,compass,[dummy] glanced at the compass
+S178,P11,Implicit,trial,source,map,[dummy] opened the map to check
+S179,P11,Implicit,trial,source,map,[dummy] opened the map to check
+S180,P11,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S181,P11,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S182,P11,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S183,P11,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S184,P11,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S185,P11,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S186,P11,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S187,P11,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S188,P11,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S189,P11,Implicit,final,experience,frustrating,[dummy] got frustrated
+S190,P12,Explicit,trial,source,marker,[dummy] followed the marker
+S191,P12,Explicit,trial,source,compass,[dummy] glanced at the compass
+S192,P12,Explicit,trial,source,compass,[dummy] glanced at the compass
+S193,P12,Explicit,trial,source,clue_text,[dummy] re-read the clue text
+S194,P12,Explicit,trial,source,clue_text,[dummy] re-read the clue text
+S195,P12,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S196,P12,Explicit,final,experience,more_immersive,[dummy] felt more immersed
+S197,P12,Implicit,trial,source,marker,[dummy] followed the marker
+S198,P12,Implicit,trial,source,marker,[dummy] followed the marker
+S199,P12,Implicit,trial,source,map,[dummy] opened the map to check
+S200,P12,Implicit,trial,source,map,[dummy] opened the map to check
+S201,P12,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S202,P12,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S203,P12,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S204,P12,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S205,P12,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S206,P12,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S207,P12,Implicit,final,experience,more_confident,[dummy] felt sure of the way
+S208,P12,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S209,P12,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S210,P13,Explicit,trial,source,marker,[dummy] followed the marker
+S211,P13,Explicit,trial,source,marker,[dummy] followed the marker
+S212,P13,Explicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S213,P13,Explicit,trial,difficulty,missed_branch,[dummy] took the wrong branch
+S214,P13,Implicit,trial,source,compass,[dummy] glanced at the compass
+S215,P13,Implicit,trial,source,map,[dummy] opened the map to check
+S216,P13,Implicit,trial,source,map,[dummy] opened the map to check
+S217,P13,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S218,P13,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S219,P13,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S220,P13,Implicit,trial,source,character_clues,[dummy] relied on what the character said
+S221,P13,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S222,P13,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S223,P13,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S224,P13,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S225,P13,Implicit,final,experience,frustrating,[dummy] got frustrated
+S226,P14,Explicit,trial,source,marker,[dummy] followed the marker
+S227,P14,Explicit,trial,source,marker,[dummy] followed the marker
+S228,P14,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S229,P14,Explicit,final,experience,more_effortful,[dummy] had to think harder
+S230,P14,Implicit,trial,source,marker,[dummy] followed the marker
+S231,P14,Implicit,trial,source,marker,[dummy] followed the marker
+S232,P14,Implicit,trial,source,compass,[dummy] glanced at the compass
+S233,P14,Implicit,trial,source,map,[dummy] opened the map to check
+S234,P14,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S235,P14,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S236,P14,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S237,P14,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S238,P14,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S239,P14,Implicit,trial,difficulty,missed_branch,[dummy] took the wrong branch
+S240,P14,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S241,P14,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S242,P15,Explicit,trial,source,marker,[dummy] followed the marker
+S243,P15,Explicit,trial,source,marker,[dummy] followed the marker
+S244,P15,Explicit,trial,source,compass,[dummy] glanced at the compass
+S245,P15,Explicit,trial,source,compass,[dummy] glanced at the compass
+S246,P15,Explicit,final,experience,more_confident,[dummy] felt sure of the way
+S247,P15,Implicit,trial,source,compass,[dummy] glanced at the compass
+S248,P15,Implicit,trial,source,compass,[dummy] glanced at the compass
+S249,P15,Implicit,trial,source,map,[dummy] opened the map to check
+S250,P15,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S251,P15,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S252,P15,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S253,P15,Implicit,trial,source,lighting_colour,[dummy] noticed lighting
+S254,P15,Implicit,trial,difficulty,lost_orientation,[dummy] was not sure where to go
+S255,P15,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S256,P15,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S257,P15,Implicit,final,experience,more_immersive,[dummy] felt more immersed
+S258,P16,Explicit,trial,source,marker,[dummy] followed the marker
+S259,P16,Explicit,final,experience,more_immersive,[dummy] felt more immersed
+S260,P16,Implicit,trial,source,compass,[dummy] glanced at the compass
+S261,P16,Implicit,trial,source,compass,[dummy] glanced at the compass
+S262,P16,Implicit,trial,source,map,[dummy] opened the map to check
+S263,P16,Implicit,trial,source,clue_text,[dummy] re-read the clue text
+S264,P16,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S265,P16,Implicit,trial,source,landmarks_terrain,[dummy] used a landmark to decide
+S266,P16,Implicit,trial,difficulty,map_hard_to_relate,[dummy] map did not match the view
+S267,P16,Implicit,trial,difficulty,ambiguous_clue,[dummy] the clue was unclear
+S268,P16,Implicit,final,experience,more_effortful,[dummy] had to think harder
+S269,P16,Implicit,final,experience,more_immersive,[dummy] felt more immersed
