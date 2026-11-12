@@ -1,0 +1,9 @@
+numpy
+pandas>=2.2
+scipy
+matplotlib
+scikit-learn
+nbformat
+nbconvert
+ipykernel
+pytest
