@@ -1,0 +1,10 @@
+Official item mapping
+Column	UEQ-S item	Dimension
+Item 1	Obstructive – Supportive	Pragmatic
+Item 2	Complicated – Easy	Pragmatic
+Item 3	Inefficient – Efficient	Pragmatic
+Item 4	Confusing – Clear	Pragmatic
+Item 5	Boring – Exciting	Hedonic
+Item 6	Not interesting – Interesting	Hedonic
+Item 7	Conventional – Inventive	Hedonic
+Item 8	Usual – Leading edge	Hedonic
