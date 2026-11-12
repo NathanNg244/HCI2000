@@ -1,9 +1,0 @@
-participant_id,age,gender,weekly_gaming_hours,years_of_gaming,third_person_3d_game_past_12_months,previous_assassins_creed_play,input_device,open_world_game_experience
-P01,21,Woman,8,4,Yes,No,Keyboard and mouse,Yes
-P02,22,Man,12,6,Yes,Yes,Gamepad,Yes
-P03,20,Woman,5,3,Yes,No,Keyboard and mouse,Yes
-P04,23,Man,10,7,Yes,No,Gamepad,Yes
-P05,21,Man,6,4,Yes,Yes,Keyboard and mouse,Yes
-P06,24,Woman,14,8,Yes,No,Gamepad,Yes
-P07,22,Woman,7,5,Yes,No,Keyboard and mouse,Yes
-P08,20,Man,9,2,Yes,Yes,Gamepad,Yes
