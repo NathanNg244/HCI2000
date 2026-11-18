@@ -16,6 +16,11 @@ MUTANTS = [
     ("Holm multiplier m-rank -> m", "(m - rank) * p[i]", "m * p[i]"),
     ("Holm monotonicity dropped", "running = max(running, (m - rank) * p[i])", "running = (m - rank) * p[i]"),
     ("MAD z constant changed", "0.6745 *", "0.5 *"),
+    ("weekly hours limit 168 -> 169", "HOURS_PER_WEEK = 24 * 7", "HOURS_PER_WEEK = 24 * 7 + 1"),
+    ("max age 122 -> 123", "MAX_HUMAN_AGE = 122", "MAX_HUMAN_AGE = 123"),
+    ("count vs seconds: > -> >=", 'bad = df[c] > df["elapsed_time_sec"]', 'bad = df[c] >= df["elapsed_time_sec"]'),
+    ("years of gaming may not equal age", 'bad = df["years_of_gaming"] > df["age"]', 'bad = df["years_of_gaming"] >= df["age"]'),
+    ("covariate outlier threshold 3.5 -> 5", "def flag_covariate_outliers(df, cols, table, log, threshold=3.5)", "def flag_covariate_outliers(df, cols, table, log, threshold=5.0)"),
     ("UEQ-S overall skipna True", 'sc.mean(axis=1, skipna=False)', 'sc.mean(axis=1, skipna=True)'),
     ("pragmatic skipna True", 'UEQS_PRAGMATIC_ITEMS]].mean(axis=1, skipna=False)', 'UEQS_PRAGMATIC_ITEMS]].mean(axis=1, skipna=True)'),
 ]
