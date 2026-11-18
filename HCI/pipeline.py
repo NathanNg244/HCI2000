@@ -32,6 +32,8 @@ import pandas as pd
 CONDITIONS = ("Explicit", "Implicit")          # X = more explicit, I = more implicit
 COND_SHORT = {"Explicit": "X", "Implicit": "I"}
 ROUTES = ("Route_A", "Route_B")                # Route_A = R1, Route_B = R2 in the paper
+HOURS_PER_WEEK = 24 * 7                         # 168: nobody can report more gaming hours than a week holds
+MAX_HUMAN_AGE = 122                             # longest documented human lifespan; a hard ceiling, not a typical value
 TIME_CAP_SEC = 480                             # 8-minute cap (paper, measure 1)
 
 # Number of decision points D per route. PLACEHOLDER: the pilot fixes these.
@@ -66,7 +68,7 @@ REQUIRED_COLUMNS = {
                      "previous_assassins_creed_play", "input_device",
                      "open_world_game_experience"],
     "trials": ["participant_id", "trial_number", "condition", "route_id",
-               "trial_position", "elapsed_time_sec", "combat_cutscene_pause_sec",
+               "trial_position", "start_time", "end_time", "combat_cutscene_pause_sec",
                "completed", "wayfinding_errors", "lost_episodes", "map_openings",
                "total_map_open_duration_sec", "objective_board_openings",
                "compass_use_notes"],
@@ -238,6 +240,8 @@ def standardize_columns(df: pd.DataFrame, table: str, log: IssueLog) -> pd.DataF
     missing = [c for c in required if c not in df.columns]
     if missing:
         raise SchemaError(f"{table}: missing required column(s) {missing}")
+    derived = {"start_time_sec", "end_time_sec", "elapsed_time_sec"} if table == "trials" else set()
+    df = df.drop(columns=[c for c in df.columns if c in derived])      # recomputed below, never trusted
     for c in [c for c in df.columns if c not in required]:
         log.add(table, "unexpected_column", "repaired", field=c,
                 detail="column not in the study schema was dropped")
@@ -336,6 +340,22 @@ def _conflicting_keys(df, keys):
 # =============================================================================
 # 5. Table-specific cleaning
 # =============================================================================
+def flag_covariate_outliers(df, cols, table, log, threshold=3.5):
+    """Modified z-score flag (median/MAD) for background variables. The cut-off comes from the sample,
+    so there is no fixed 'more than X hours is suspicious' number; flagged values are kept."""
+    if len(df) < 5:
+        return
+    for c in cols:
+        x = df[c].astype(float).dropna()
+        mad = np.median(np.abs(x - x.median())) if len(x) else 0
+        if mad == 0:
+            continue
+        z = 0.6745 * (x - x.median()) / mad
+        for idx in z[np.abs(z) > threshold].index:
+            log.add(table, f"{c}:outlier", "flagged", df.loc[idx, "_row"], df.loc[idx, "participant_id"], c,
+                    df.loc[idx, c], detail=f"modified z = {z[idx]:.1f} within the sample; verify with the participant")
+
+
 def clean_participants(raw, log, store):
     t = "participants"
     df = standardize_columns(raw, t, log)
@@ -351,9 +371,9 @@ def clean_participants(raw, log, store):
     for c in ["third_person_3d_game_past_12_months", "previous_assassins_creed_play",
               "open_world_game_experience"]:
         df = _normalise_col(df, c, normalize_yes_no, t, log, f"{c}:yes_no")
-    df = _numeric_col(df, "age", t, log, lo=0, hi=100, integer=True)
-    df = _numeric_col(df, "weekly_gaming_hours", t, log, lo=0, hi=168)
-    df = _numeric_col(df, "years_of_gaming", t, log, lo=0, hi=100)
+    df = _numeric_col(df, "age", t, log, lo=0, hi=MAX_HUMAN_AGE, integer=True)
+    df = _numeric_col(df, "weekly_gaming_hours", t, log, lo=0, hi=HOURS_PER_WEEK)
+    df = _numeric_col(df, "years_of_gaming", t, log, lo=0)      # upper limit: the age check below
 
     # impossible combination: more years of play than years of life
     bad = df["years_of_gaming"] > df["age"]
@@ -362,19 +382,72 @@ def clean_participants(raw, log, store):
                 "years_of_gaming", r["years_of_gaming"], None, "longer than the participant's life")
     df.loc[bad, "years_of_gaming"] = np.nan
 
-    # plausibility flags (kept)
-    for _, r in df[(df["weekly_gaming_hours"] > 80)].iterrows():
-        log.add(t, "weekly_gaming_hours>80", "flagged", r["_row"], r["participant_id"],
-                "weekly_gaming_hours", r["weekly_gaming_hours"], detail="verify with participant")
-    for _, r in df[(df["age"] > 40)].iterrows():
-        log.add(t, "age>40", "flagged", r["_row"], r["participant_id"], "age", r["age"],
-                detail="unusual for a student sample")
+    # unusual but possible values are flagged relative to the sample itself (no fixed cut-off), and kept
+    flag_covariate_outliers(df, ["age", "weekly_gaming_hours", "years_of_gaming"], t, log)
 
     # screening rules from the paper (Section 'Screening')
     df = _quarantine(df, df["age"] < 18, t, "ineligible:age<18", log, store)
     df = _quarantine(df, df["third_person_3d_game_past_12_months"] == "No", t,
                      "ineligible:no_third_person_3d_play_12mo", log, store)
     return df.reset_index(drop=True)
+
+
+_CLOCK_RE = re.compile(r"^\s*(?:(\d{1,2}):)?(\d{1,3}):([0-5]\d)(?:\.\d+)?\s*$")
+
+
+def parse_clock(x):
+    """Recording timecode -> seconds. Accepts m:ss, mm:ss and h:mm:ss (e.g. '3:25', '0:03:25').
+    Returns None when the text is not a valid timecode."""
+    if x is None:
+        return None
+    m = _CLOCK_RE.match(str(x))
+    if not m:
+        return None
+    h, mi, s = m.groups()
+    return int(h or 0) * 3600 + int(mi) * 60 + int(s)
+
+
+def _derive_elapsed(df, table, log):
+    """Elapsed time is COMPUTED, never typed: elapsed = end_time - start_time, both read from the
+    screen-recording timecode (paper, measure 1). Bad or inconsistent stamps -> elapsed is missing."""
+    start, end, elapsed = [], [], []
+    for _, r in df.iterrows():
+        s0, e0 = r["start_time"], r["end_time"]
+        s, e = (None if _is_na(s0) else parse_clock(s0)), (None if _is_na(e0) else parse_clock(e0))
+        bad = [(c, v) for c, v, x in (("start_time", s0, s), ("end_time", e0, e)) if not _is_na(v) and x is None]
+        for c, v in bad:
+            log.add(table, f"{c}:format", "set_missing", r["_row"], r.get("participant_id"), c, v, None,
+                    "expected a timecode such as 3:25 or 0:03:25")
+        if s is not None and e is not None and e <= s:
+            log.add(table, "end_time<=start_time", "set_missing", r["_row"], r.get("participant_id"),
+                    "start_time;end_time", f"{s0};{e0}", None, "the trial cannot end before it starts")
+            s = e = None
+        if s is None:
+            df.at[_, "start_time"] = np.nan
+        if e is None:
+            df.at[_, "end_time"] = np.nan
+        start.append(np.nan if s is None else float(s))
+        end.append(np.nan if e is None else float(e))
+        el = np.nan if (s is None or e is None) else float(e - s)
+        elapsed.append(el)
+    df["start_time_sec"], df["end_time_sec"] = start, end
+    df["elapsed_time_sec"] = elapsed
+    return df
+
+
+COUNT_COLS_TRIAL = ["lost_episodes", "map_openings", "objective_board_openings"]   # errors are bounded by D instead
+
+
+def _counts_fit_in_time(df, table, log):
+    """An error, a lost episode or a map or board opening takes at least one second, so a count larger than
+    the seconds in the trial is a typing error. This replaces any fixed upper limit on counts."""
+    for c in COUNT_COLS_TRIAL:
+        bad = df[c] > df["elapsed_time_sec"]            # NaN compares False: nothing to check without a valid time
+        for _, r in df[bad].iterrows():
+            log.add(table, f"{c}>elapsed", "set_missing", r["_row"], r.get("participant_id"), c, r[c], None,
+                    "more events than seconds in the trial")
+        df.loc[bad, c] = np.nan
+    return df
 
 
 def _validate_trial_numbers(df, log):
@@ -384,13 +457,14 @@ def _validate_trial_numbers(df, log):
     df = _normalise_col(df, "route_id", normalize_route, t, log, "route_id:category")
     df = _normalise_col(df, "completed", normalize_bool, t, log, "completed:boolean")
     for c, lo, hi, integer in [("trial_number", 1, 2, True), ("trial_position", 1, 2, True),
-                               ("elapsed_time_sec", 1, 3600, False),
-                               ("combat_cutscene_pause_sec", 0, 3600, False),
-                               ("wayfinding_errors", 0, 50, True), ("lost_episodes", 0, 50, True),
-                               ("map_openings", 0, 200, True),
-                               ("total_map_open_duration_sec", 0, 3600, False),
-                               ("objective_board_openings", 0, 200, True)]:
+                               ("combat_cutscene_pause_sec", 0, None, False),
+                               ("wayfinding_errors", 0, None, True), ("lost_episodes", 0, None, True),
+                               ("map_openings", 0, None, True),
+                               ("total_map_open_duration_sec", 0, None, False),
+                               ("objective_board_openings", 0, None, True)]:
         df = _numeric_col(df, c, t, log, lo, hi, integer)
+    df = _derive_elapsed(df, t, log)
+    df = _counts_fit_in_time(df, t, log)
     return df
 
 
@@ -539,8 +613,8 @@ def clean_reliability(raw, valid_ids, log, store):
                      "invalid_key", log, store)
     df = _quarantine(df, ~df["participant_id"].isin(valid_ids), t,
                      "unknown_or_excluded_participant", log, store)
-    df = _numeric_col(df, "coder1", t, log, lo=0, hi=200, integer=True)
-    df = _numeric_col(df, "coder2", t, log, lo=0, hi=200, integer=True)
+    df = _numeric_col(df, "coder1", t, log, lo=0, integer=True)
+    df = _numeric_col(df, "coder2", t, log, lo=0, integer=True)
     df["item"] = df["item"].map(lambda v: pd.NA if _is_na(v) else str(v).strip().lower().removesuffix(".0"))
     df["measure"] = df["measure"].map(lambda v: pd.NA if _is_na(v) else str(v).strip().lower())
     df = _drop_exact_duplicates(df, t, log)
@@ -841,19 +915,31 @@ def describe_by_condition(long: pd.DataFrame, wide: pd.DataFrame, measures) -> p
     return pd.DataFrame(rows)
 
 
-def format_descriptives(desc: pd.DataFrame, digits=1) -> pd.DataFrame:
-    """Presentation table: 'median [min, max]' and 'mean (SD)' per condition."""
-    out = pd.DataFrame({"Measure": desc["label"] + " (" + desc["unit"] + ")"})
-    for k, name in (("X", "X"), ("I", "I")):
-        out[f"{name} median [min, max]"] = [
-            f"{fmt_num(a, digits)} [{fmt_num(b, digits)}, {fmt_num(c, digits)}]"
-            for a, b, c in zip(desc[f"median_{k}"], desc[f"min_{k}"], desc[f"max_{k}"])]
-        out[f"{name} mean (SD)"] = [f"{fmt_num(a, digits)} ({fmt_num(b, digits)})"
-                                     for a, b in zip(desc[f"mean_{k}"], desc[f"sd_{k}"])]
-    out["Higher under X / I / equal (n)"] = [f"{a} / {b} / {c}" for a, b, c in
-                                         zip(desc["n_higher_X"], desc["n_higher_I"], desc["n_equal"])]
-    out["Pairs (n)"] = desc["n_pairs"]
+STAT_DIGITS = 2     # one precision for every numeric column of every descriptive table
+
+
+def format_descriptives(desc: pd.DataFrame, digits=STAT_DIGITS) -> pd.DataFrame:
+    """Presentation table, one row per measure and condition, one column per statistic
+    (n, median, min, max, mean, SD) so that every statistic is aligned in its own column."""
+    rows = []
+    for _, r in desc.iterrows():
+        for k, cond in (("X", "More explicit (X)"), ("I", "More implicit (I)")):
+            rows.append({"Measure": f"{r['label']} ({r['unit']})", "Condition": cond, "n": int(r[f"n_{k}"]),
+                         "Median": r[f"median_{k}"], "Min": r[f"min_{k}"], "Max": r[f"max_{k}"],
+                         "Mean": r[f"mean_{k}"], "SD": r[f"sd_{k}"]})
+    out = pd.DataFrame(rows)
+    for c in ("Median", "Min", "Max", "Mean", "SD"):
+        out[c] = out[c].astype(float).round(digits)
     return out
+
+
+def format_directions(desc: pd.DataFrame) -> pd.DataFrame:
+    """Paired direction counts: how many participants were higher under X, under I, or equal."""
+    return pd.DataFrame({"Measure": desc["label"] + " (" + desc["unit"] + ")",
+                         "Pairs": desc["n_pairs"].astype(int),
+                         "Higher under X": desc["n_higher_X"].astype(int),
+                         "Higher under I": desc["n_higher_I"].astype(int),
+                         "Equal": desc["n_equal"].astype(int)})
 
 
 def completion_table(long: pd.DataFrame) -> pd.DataFrame:
@@ -865,18 +951,22 @@ def completion_table(long: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def describe_by_group(long: pd.DataFrame, group: str, measures, digits=1) -> pd.DataFrame:
-    """Median [min, max] and n for each level of `group` (trial_position / route_id)
-    within each condition; descriptive check of learning and route effects."""
+def describe_by_group(long: pd.DataFrame, group: str, measures, digits=STAT_DIGITS) -> pd.DataFrame:
+    """Median, min, max, mean and SD per condition, level of `group` (trial_position / route_id)
+    and measure, each statistic in its own column; descriptive check of learning and route effects."""
     rows = []
     for (cond, lvl), g in long.groupby(["condition", group], observed=True):
-        r = {"condition": str(cond), group: str(lvl), "n": len(g)}
         for m in measures:
             x = g[m].astype(float).dropna()
-            r[m] = (f"{fmt_num(x.median(), digits)} [{fmt_num(x.min(), digits)}, {fmt_num(x.max(), digits)}]"
-                    if len(x) else "n/a")
-        rows.append(r)
-    return pd.DataFrame(rows)
+            rows.append({"condition": str(cond), group: str(lvl), "measure": MEASURES.get(m, (m, ""))[0],
+                         "n": len(x), "median": x.median() if len(x) else np.nan,
+                         "min": x.min() if len(x) else np.nan, "max": x.max() if len(x) else np.nan,
+                         "mean": x.mean() if len(x) else np.nan,
+                         "sd": x.std(ddof=1) if len(x) > 1 else np.nan})
+    out = pd.DataFrame(rows)
+    for c in ("median", "min", "max", "mean", "sd"):
+        out[c] = out[c].round(digits)
+    return out
 
 
 def bootstrap_ci(x, stat=np.mean, n_boot=10_000, alpha=0.05, seed=2026):
@@ -983,28 +1073,30 @@ def headline_table(desc: pd.DataFrame, diffs: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 # 8. Participant description, covariates
 # =============================================================================
-def participant_table(parts: pd.DataFrame) -> pd.DataFrame:
+def participant_numeric_table(parts: pd.DataFrame, digits=STAT_DIGITS) -> pd.DataFrame:
+    """Numeric background variables: n, median, min, max, mean and SD, each in its own column."""
+    rows = []
+    for label, col in (("Age (years)", "age"), ("Gaming hours per week", "weekly_gaming_hours"),
+                       ("Years of gaming", "years_of_gaming")):
+        x = parts[col].astype(float).dropna()
+        rows.append({"Variable": label, "n": len(x), "Median": x.median(), "Min": x.min(), "Max": x.max(),
+                     "Mean": x.mean(), "SD": x.std(ddof=1) if len(x) > 1 else np.nan})
+    out = pd.DataFrame(rows)
+    for c in ("Median", "Min", "Max", "Mean", "SD"):
+        out[c] = out[c].round(digits)
+    return out
+
+
+def participant_categorical_table(parts: pd.DataFrame) -> pd.DataFrame:
+    """Categorical background variables: one row per category with count and percentage."""
     n = len(parts)
     rows = []
-
-    def num(label, col):
-        x = parts[col].astype(float)
-        rows.append((label, f"median {fmt_num(x.median())} [{fmt_num(x.min())}, {fmt_num(x.max())}]; "
-                            f"mean {fmt_num(x.mean())} (SD {fmt_num(x.std(ddof=1))})"))
-
-    def cat(label, col):
-        vc = parts[col].astype(str).value_counts()
-        rows.append((label, "; ".join(f"{k}: {v} ({100*v/n:.0f}%)" for k, v in vc.items())))
-
-    rows.append(("Participants (n)", str(n)))
-    num("Age (years)", "age")
-    cat("Gender", "gender")
-    num("Gaming hours per week", "weekly_gaming_hours")
-    num("Years of gaming", "years_of_gaming")
-    cat("Open-world experience", "open_world_game_experience")
-    cat("Prior Assassin's Creed play", "previous_assassins_creed_play")
-    cat("Input device", "input_device")
-    return pd.DataFrame(rows, columns=["Characteristic", "Summary"])
+    for label, col in (("Gender", "gender"), ("Open-world experience", "open_world_game_experience"),
+                       ("Prior Assassin's Creed play", "previous_assassins_creed_play"),
+                       ("Input device", "input_device")):
+        for k, v in parts[col].astype(str).value_counts().items():
+            rows.append({"Characteristic": label, "Category": k, "n": int(v), "Percent": round(100 * v / n, 1)})
+    return pd.DataFrame(rows)
 
 
 def sequence_table(wide: pd.DataFrame) -> pd.DataFrame:
@@ -1234,3 +1326,166 @@ def run_pipeline(data_dir=".", suffix="_dummy"):
     if "reliability" in clean.tables:
         reliability_consistency(clean.tables["reliability"], clean.trials, clean.log)
     return raw, clean, long, wide
+
+
+# =============================================================================
+# 9. Where every fixed number in this pipeline comes from (supervisor comment:
+#    "the numbers in the script have to be based on something")
+# =============================================================================
+# (name, value in code, basis, source). "Design" = fixed by our own protocol; "Convention" = a
+# published or standard convention; "Placeholder" = to be replaced by a measured value.
+PARAMETERS = [
+    ("TIME_CAP_SEC", TIME_CAP_SEC, "Design",
+     "A route takes about 3 min at a normal pace (protocol, Materials); the 8-min cap is about 2.7 times that, "
+     "long enough for a lost player to finish and short enough to end a stuck trial. Fixed in the protocol, not by the data."),
+    ("MIN_AGE_YEARS", 18, "Design", "Screening rule: age 18 or older (protocol, Screening)."),
+    ("SAMPLE_SIZE", 16, "Design",
+     "Multiple of the four counterbalanced sequences, sized for a 12-week course (protocol, Participants)."),
+    ("PARTICIPANTS_PER_SEQUENCE", 4, "Design", "16 participants / 4 sequences (protocol, Study design)."),
+    ("WRONG_BRANCH_SEC", 10, "Design", "A wrong-branch entry counts as an error when kept for more than 10 s (measure 2)."),
+    ("PAUSE_POINTS_MAX", 10, "Design", "At most 10 pause points per recording-cued interview (protocol, Recording-cued interview)."),
+    ("STOP_SEC", 5, "Design", "A stop of 5 s or longer becomes a pause point (protocol)."),
+    ("HOURS_PER_WEEK", HOURS_PER_WEEK, "Logic", "24 hours x 7 days: nobody can report more weekly gaming hours than a week holds. Hard limit; values inside it that are far from the sample are flagged, not changed."),
+    ("MAX_HUMAN_AGE", MAX_HUMAN_AGE, "Logic", "Longest documented human lifespan (122 years). A ceiling for typing errors only; eligibility (age 18 or older) is a separate screening rule from the protocol."),
+    ("COUNT_LIMIT", "events <= seconds", "Logic", "An error, lost episode, or map or board opening takes at least one second, so a count cannot exceed the seconds in the trial. This replaces any fixed upper limit."),
+    ("YEARS_OF_GAMING_LIMIT", "<= age", "Logic", "A participant cannot have played for longer than they have lived."),
+    ("ROUTE_DECISION_POINTS", 4, "Placeholder",
+     "Protocol requires at least 3 decision points per route; 4 is a stand-in until the route sheets are final."),
+    ("TLX_RANGE", "0-100", "Convention", "Raw NASA-TLX subscales are rated 0-100 (Hart and Staveland 1988; Hart 2006)."),
+    ("UEQS_RAW_RANGE", "1-7", "Convention", "UEQ-S items use a seven-point scale, rescaled to -3..+3 (Schrepp et al. 2017)."),
+    ("UEQS_PRAGMATIC_ITEMS", "1-4", "Convention", "Items 1-4 pragmatic, 5-8 hedonic (Schrepp et al. 2017)."),
+    ("OUTLIER_MODIFIED_Z", 3.5, "Convention",
+     "Modified z-score above 3.5 flags a value for review (Iglewicz and Hoaglin 1993); values are flagged, never removed."),
+    ("OUTLIER_MAD_CONSTANT", 0.6745, "Convention", "Makes the MAD comparable to a standard deviation for normal data (same source)."),
+    ("BOOTSTRAP_RESAMPLES", 10_000, "Convention", "Percentile bootstrap of the mean difference (Efron and Tibshirani 1993); enough for stable 95% limits."),
+    ("CI_LEVEL", 0.95, "Convention", "Conventional interval level; used for estimation only, not for a significance test."),
+    ("DOUBLE_CODED_SHARE", 0.25, "Design", "A second coder codes a random quarter of participants, four of 16 (protocol, Coding)."),
+    ("KAPPA_BANDS", "Landis-Koch", "Convention", "Agreement labels follow Landis and Koch (1977)."),
+    ("SEED", 2026, "Reproducibility", "Fixed seed so the bootstrap intervals are identical on every run."),
+]
+
+
+def parameter_table() -> pd.DataFrame:
+    return pd.DataFrame(PARAMETERS, columns=["Parameter", "Value", "Basis", "Why this value"]).astype({"Value": str})
+
+
+# =============================================================================
+# 10. Numbers for the paper: written to LaTeX macros so the text cannot drift from the notebook
+# =============================================================================
+MACRO_KEYS = {"completion_time_sec": "ct", "wayfinding_errors": "er", "lost_episodes": "lo", "map_openings": "mo",
+              "map_open_duration_sec": "md", "objective_board_openings": "ob", "nasa_tlx_raw": "tlx",
+              "ueqs_overall": "ueq", "ueqs_pragmatic": "uep", "ueqs_hedonic": "ueh",
+              "mental_demand": "tlxmen", "physical_demand": "tlxphy", "temporal_demand": "tlxtem",
+              "performance": "tlxper", "effort": "tlxeff", "frustration": "tlxfru", "map_time_share": "mts"}
+
+
+def _mv(x, d=1):
+    return "--" if x is None or (isinstance(x, float) and np.isnan(x)) else fmt_num(float(x), d)
+
+
+def paper_macros(desc: pd.DataFrame, diffs: pd.DataFrame, completion: pd.DataFrame, rel_summary: pd.DataFrame,
+                 parts: pd.DataFrame, extra: dict | None = None, dummy: bool = True) -> str:
+    """LaTeX \\newcommand lines for every number quoted in the paper's text. With dummy=True every value is
+    wrapped in \\dm{...}, which the paper prints in red, so dummy numbers cannot be mistaken for results."""
+    L = ["% GENERATED by the notebook (pipeline.paper_macros). Do not edit by hand.", ""]
+
+    def add(name, val):
+        v = str(val)
+        if re.fullmatch(r"-\d+(\.\d+)?", v):
+            v = f"${v}$"                                   # typographic minus sign
+        L.append(f"\\newcommand{{\\{name}}}{{\\dm{{{v}}}}}" if dummy else f"\\newcommand{{\\{name}}}{{{v}}}")
+
+    for _, r in desc.iterrows():
+        k = MACRO_KEYS.get(r["measure"])
+        if not k:
+            continue
+        d = 1 if r["unit"] in ("s", "0-100") else 2
+        for c in ("X", "I"):
+            for stat, lab in (("median", "Med"), ("min", "Min"), ("max", "Max"), ("mean", "Mean"), ("sd", "Sd")):
+                add(f"{k}{lab}{c}", _mv(r[f"{stat}_{c}"], d))
+            add(f"{k}N{c}", int(r[f"n_{c}"]))
+        add(f"{k}HiX", int(r["n_higher_X"])); add(f"{k}HiI", int(r["n_higher_I"]))
+        add(f"{k}Eq", int(r["n_equal"])); add(f"{k}Pairs", int(r["n_pairs"]))
+    for _, r in diffs.iterrows():
+        k = MACRO_KEYS.get(r["measure"])
+        if not k:
+            continue
+        d = 1 if r["measure"] in ("completion_time_sec", "map_open_duration_sec", "nasa_tlx_raw") else 2
+        add(f"{k}DiffMean", _mv(r["mean_diff"], d)); add(f"{k}DiffMed", _mv(r["median_diff"], d))
+        add(f"{k}CiLo", _mv(r["ci95_low"], d)); add(f"{k}CiHi", _mv(r["ci95_high"], d))
+        add(f"{k}Dz", _mv(r["dz"], 1))
+    for _, r in completion.iterrows():
+        c = COND_SHORT[r["condition"]]
+        add(f"trials{c}", int(r["trials"])); add(f"done{c}", int(r["completed"])); add(f"timeout{c}", int(r["timeouts"]))
+    for _, r in rel_summary.iterrows():
+        key = {"Wayfinding error code (per decision point)": "relErr"}.get(r["measure"])
+        if key is None:
+            key = "rel" + "".join(w.capitalize() for w in re.sub(r"[^a-z ]", "", r["measure"].split(" (")[0].lower()).split())
+        add(f"{key}Pct", _mv(r["percent_agreement"], 1))
+        if not pd.isna(r["value"]):
+            add(f"{key}Kappa", _mv(r["value"], 2)); add(f"{key}KappaLabel", str(r["kappa_label"]).lower())
+        add(f"{key}Units", int(r["units"]))
+    add("nParticipants", len(parts))
+    for lab, col in (("Age", "age"), ("Hours", "weekly_gaming_hours"), ("Years", "years_of_gaming")):
+        x = parts[col].astype(float)
+        add(f"p{lab}Med", _mv(x.median(), 1)); add(f"p{lab}Min", _mv(x.min(), 0)); add(f"p{lab}Max", _mv(x.max(), 0))
+        add(f"p{lab}Mean", _mv(x.mean(), 1)); add(f"p{lab}Sd", _mv(x.std(ddof=1), 1))
+    for k, v in (extra or {}).items():
+        add(k, v)
+    return "\n".join(L) + "\n"
+
+
+# =============================================================================
+# 11. Readable names for cleaning rules (used in the paper's cleaning table)
+# =============================================================================
+_FIELD_WORDS = {"age": "age", "weekly_gaming_hours": "weekly gaming hours", "years_of_gaming": "years of gaming",
+                "participant_id": "participant ID", "condition": "condition", "route_id": "route", "gender": "gender",
+                "input_device": "input device", "completed": "completed flag", "start_time": "start timecode",
+                "end_time": "end timecode"}
+_RULE_TEXT = {
+    "na_token": "Missing-value token (n/a, -) read as missing",
+    "exact_duplicate_row": "Exact duplicate row dropped",
+    "unexpected_column": "Column outside the study schema dropped",
+    "unknown_or_excluded_participant": "Record for an unregistered or excluded participant set aside",
+    "end_time<=start_time": "End timecode not after start timecode",
+    "pause>=elapsed": "Pauses cover the whole trial",
+    "errors>decision_points": "More errors than decision points",
+    "map_duration>0_with_0_openings": "Map open time with zero openings",
+    "map_duration>elapsed": "Map open longer than the trial",
+    "completed_but_over_cap": "Marked completed but over the time cap",
+    "not_completed_before_cap": "Not completed before the time cap",
+    "trial_number!=trial_position": "Trial number differs from recording order",
+    "trial_position_filled_from_trial_number": "Missing trial position filled from trial number",
+    "ueqs_straight_lining": "All eight UEQ-S items identical",
+    "years_of_gaming>age": "More years of play than years of life",
+    "lost_episodes>elapsed": "Lost episodes exceed the seconds in the trial",
+    "map_openings>elapsed": "Map openings exceed the seconds in the trial",
+    "objective_board_openings>elapsed": "Board openings exceed the seconds in the trial",
+    "design_violation": "Participant breaks the counterbalanced design",
+    "error_code_not_binary": "Error code not 0 or 1",
+    "missing_condition_record": "Participant lacks a record for one condition",
+    "conflicting_duplicate_condition": "Conflicting duplicate for a condition",
+    "conflicting_duplicate_position": "Conflicting duplicate for a trial position",
+    "invalid_participant_id": "Participant ID unreadable", "invalid_condition": "Condition unreadable",
+    "invalid_route": "Route unreadable", "missing_trial_position": "Trial position missing",
+}
+
+
+def rule_label(rule: str) -> str:
+    """Human-readable name of a cleaning rule, for tables in the paper."""
+    if rule in _RULE_TEXT:
+        return _RULE_TEXT[rule]
+    if rule.endswith(":outlier"):
+        field = rule.split(":")[0]
+        name = MEASURES.get(field, (_FIELD_WORDS.get(field, field.replace("_", " ")), ""))[0]
+        return f"{name[0].upper() + name[1:]} flagged as an outlier (kept)"
+    if ":" in rule:
+        field, kind = rule.split(":", 1)
+        w = _FIELD_WORDS.get(field, field.replace("_", " "))
+        text = {"format": f"{w} in the wrong format" if field != "participant_id" else "Participant ID in the wrong format",
+                "category": f"{w} spelling or case normalised", "boolean": f"{w} spelling normalised",
+                "out_of_range": f"{w} outside its allowed range", "non_numeric": f"{w} is not a number",
+                "non_integer": f"{w} is not a whole number"}.get(kind)
+        if text:
+            return text[0].upper() + text[1:]
+    return rule.replace("_", " ")
