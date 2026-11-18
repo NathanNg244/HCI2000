@@ -65,11 +65,23 @@ import numpy as np
 import pandas as pd
 from IPython.display import display
 
+# Make pipeline.py and plots.py importable wherever the notebook is opened (VS Code, Jupyter, Colab).
+# They are looked for in the working folder, its two parents, and ./src.
+_here = Path.cwd()
+for _d in [_here, *list(_here.parents)[:2], _here / "src"]:
+    if (_d / "pipeline.py").exists():
+        sys.path.insert(0, str(_d))
+        break
+else:
+    raise FileNotFoundError("pipeline.py not found. Put pipeline.py, plots.py and the CSV files next to this notebook "
+                            "or open the notebook from the repository folder.")
 import pipeline as pl
 import plots as pp
 
 # ---- configuration -----------------------------------------------------------
-DATA_DIR = Path(".")          # folder with the CSV files
+# folder with the CSV files: the first of ./, ./data and ../data that holds participants<SUFFIX>.csv
+DATA_DIR = next((d for d in (Path("."), Path("data"), Path("../data"), _here) if (d / "participants_dummy.csv").exists()
+                 or (d / "participants.csv").exists()), Path("."))
 SUFFIX = "_dummy"             # "" for the real files: participants.csv, trials.csv, ...
 IS_DUMMY = True               # True -> watermark every figure as dummy data
 RUN_EXPLORATORY_TESTS = False # the paper commits to NO significance tests; keep False unless amended
@@ -83,6 +95,18 @@ pp.OUTDIR = OUT["figures"]
 pd.set_option("display.max_columns", 60, "display.width", 200, "display.max_colwidth", 80)
 np.random.seed(SEED)
 print(f"pandas {pd.__version__} | numpy {np.__version__} | matplotlib {matplotlib.__version__} | python {platform.python_version()}")
+""")
+
+md(r"""
+### 0.1 Where the fixed numbers come from
+Every constant used by the cleaning, preparation and analysis code is listed below with its basis, so that no number is unexplained.
+*Design* = fixed by our own protocol; *Convention* = a published or standard convention; *Placeholder* = to be replaced by a measured value.
+The table is generated from `pipeline.PARAMETERS`, and a unit test checks that each listed value equals the constant the code really uses.
+""")
+code(r"""
+params = pl.parameter_table()
+display(params)
+pp.export_table(params, "table_parameters", "Fixed parameters and their basis", image=False)
 """)
 
 # ============================================================ 1 Load
@@ -113,7 +137,7 @@ md(r"""
 | Action | When | Examples |
 |---|---|---|
 | **repaired** | the fix is deterministic and safe | `p9` -> `P09`; `" explicit "` -> `Explicit`; `TRUE`/`Yes` -> `True`; exact duplicate row dropped; `n/a` or `-` read as missing; completed trial whose active time exceeds the 480 s cap -> counted as not completed (paper, measure 1) |
-| **set_missing** | a value cannot be trusted | non-numeric, out of range (TLX outside 0-100, UEQ-S outside 1-7), non-integer count, errors > decision points, pause >= elapsed time, map time with 0 openings, map time > trial |
+| **set_missing** | a value cannot be trusted | non-numeric, out of range (TLX outside 0-100, UEQ-S outside 1-7), non-integer count, errors > decision points, pause >= elapsed time, end timecode not after start timecode, unreadable timecodes, map time with 0 openings, map time > trial |
 | **quarantined** | a row cannot be used or the correct version cannot be decided | unknown or ineligible participant (age < 18, no third-person 3D play), invalid condition/route, conflicting duplicates, broken trial design (not one trial per condition on different routes, not one of the four sequences) |
 | **flagged** | plausible but worth a look; kept | outliers (modified z > 3.5), straight-lined UEQ-S, stopped before the cap, weekly hours > 80, coder 1 differing from the trials table |
 
@@ -135,6 +159,12 @@ log = clean.log.to_frame()
 display(log[log["action"].isin(["repaired", "set_missing", "quarantined"])]
         .drop(columns=["detail"]).reset_index(drop=True))
 pp.export_table(summary, "table_cleaning_summary", "Cleaning actions by rule", image=False)
+ACTION_TEXT = {"repaired": "Repaired", "set_missing": "Set to missing", "quarantined": "Set aside", "flagged": "Flagged (kept)"}
+summary_paper = summary.assign(rule=summary["rule"].map(pl.rule_label), action=summary["action"].map(lambda a: ACTION_TEXT.get(a, a)),
+                               table=summary["table"].str.capitalize()).rename(
+    columns={"table": "Table", "rule": "Issue found", "action": "Action", "n": "Cases"})
+pp.export_table(summary_paper, "table_cleaning_paper", "Cleaning actions (readable names, for the paper)", image=False,
+                tex_align="@{}p{0.72in}p{1.5in}p{0.72in}r@{}")
 """)
 md("**Quarantined rows** are kept (never deleted) so that each can be checked against the recordings:")
 code(r"""
@@ -238,9 +268,38 @@ pp.export_table(data_dictionary, "table_data_dictionary", "Data dictionary: anal
 # ============================================================ 4 Participants
 md("## 4. Participants and design")
 code(r"""
-parts_tbl = pl.participant_table(clean.participants)
-display(parts_tbl)
-pp.export_table(parts_tbl, "table_participants", "Table 1. Participant characteristics", col_widths=[2.2, 6.4], wrap=70)
+parts_num = pl.participant_numeric_table(clean.participants)
+parts_cat = pl.participant_categorical_table(clean.participants)
+display(parts_num); display(parts_cat)
+pp.export_table(parts_num, "table_participants_numeric", "Participant characteristics: numeric variables", col_widths=[2.6, 0.7, 1.1, 0.9, 0.9, 1.0, 0.9])
+pp.export_table(parts_cat, "table_participants_categorical", "Participant characteristics: categories", col_widths=[2.6, 2.4, 0.7, 1.0])
+""")
+
+md(r"""
+### 4.1 Where the dummy numbers come from (dummy data only)
+The dummy values were not pulled from nowhere. P01-P08 are hand-entered rows; P09-P16 come from a seeded generator whose every setting is listed
+with its basis in `generate_dummy_data.DUMMY_BASIS`. These are **design assumptions**, anchored to the protocol and to the hand-entered rows,
+and carry no evidential weight. The second table checks that the generated rows stay close to the hand-entered ones.
+""")
+code(r"""
+if IS_DUMMY:
+    import generate_dummy_data as gen
+    basis = pd.DataFrame(gen.DUMMY_BASIS, columns=["Quantity", "Generator setting", "Basis"])
+    display(basis)
+    pp.export_table(basis, "table_dummy_basis", "Dummy-data generator: settings and their basis", image=False,
+                    tex_align="p{1.25in}p{2.2in}p{3.3in}")
+    hand_ids = [f"P{i:02d}" for i in range(1, 9)]
+    cols = ["completion_time_sec", "wayfinding_errors", "lost_episodes", "map_openings", "nasa_tlx_raw", "ueqs_overall"]
+    rows = []
+    for m in cols:
+        for cond in pl.CONDITIONS:
+            a = long[(long.condition == cond) & long.participant_id.isin(hand_ids)][m].astype(float)
+            b = long[(long.condition == cond) & ~long.participant_id.isin(hand_ids)][m].astype(float)
+            rows.append({"Measure": pl.MEASURES[m][0], "Condition": cond, "Median P01-P08 (hand-entered)": a.median(),
+                         "Median P09-P16 (generated)": b.median()})
+    cmp_tbl = pd.DataFrame(rows).round(2)
+    display(cmp_tbl)
+    pp.export_table(cmp_tbl, "table_dummy_check", "Hand-entered versus generated participants", col_widths=[2.2, 1.2, 2.6, 2.6])
 """)
 
 # ============================================================ 5 Results
@@ -260,8 +319,10 @@ code(r"""
 rq2 = pl.describe_by_condition(long, wide, pl.RQ_MEASURES["RQ2"])
 t_rq2 = pl.format_descriptives(rq2)
 display(t_rq2)
+dir_rq2 = pl.format_directions(rq2); display(dir_rq2)
+pp.export_table(dir_rq2, "table_rq2_directions", "Paired direction counts", col_widths=[3.2, 0.9, 1.3, 1.3, 0.9], font=10)
 pp.export_table(t_rq2, "table_rq2_information_use", "Table 2. Information use by condition (RQ2)",
-                col_widths=[2.4, 1.8, 1.4, 1.8, 1.4, 2.0, 0.9], note="X = more explicit, I = more implicit.")
+                col_widths=[2.8, 1.6, 0.6, 1.0, 0.9, 0.9, 1.0, 0.9], note="X = more explicit, I = more implicit.")
 fig = pp.fig_paired(wide, pl.RQ_MEASURES["RQ2"], "Information use by condition (RQ2)")
 pp.save_fig(fig, "fig_rq2_information_use"); plt.show()
 """)
@@ -294,8 +355,10 @@ code(r"""
 rq3 = pl.describe_by_condition(long, wide, pl.RQ_MEASURES["RQ3"])
 t_rq3 = pl.format_descriptives(rq3)
 display(t_rq3)
+dir_rq3 = pl.format_directions(rq3); display(dir_rq3)
+pp.export_table(dir_rq3, "table_rq3_directions", "Paired direction counts", col_widths=[3.2, 0.9, 1.3, 1.3, 0.9], font=10)
 pp.export_table(t_rq3, "table_rq3_wayfinding", "Table 3. Wayfinding behaviour by condition (RQ3)",
-                col_widths=[2.4, 1.8, 1.4, 1.8, 1.4, 2.0, 0.9], note="X = more explicit, I = more implicit. Not-completed trials count as 480 s.")
+                col_widths=[2.8, 1.6, 0.6, 1.0, 0.9, 0.9, 1.0, 0.9], note="X = more explicit, I = more implicit. Not-completed trials count as 480 s.")
 ct = pl.completion_table(long)
 display(ct)
 pp.export_table(ct, "table_rq3_completion", "Completion and timeouts per condition", col_widths=[1.6, 1.0, 1.2, 1.2, 1.8], font=10)
@@ -319,8 +382,10 @@ code(r"""
 rq4 = pl.describe_by_condition(long, wide, pl.RQ_MEASURES["RQ4"])
 t_rq4 = pl.format_descriptives(rq4)
 display(t_rq4)
+dir_rq4 = pl.format_directions(rq4); display(dir_rq4)
+pp.export_table(dir_rq4, "table_rq4_directions", "Paired direction counts", col_widths=[3.2, 0.9, 1.3, 1.3, 0.9], font=10)
 pp.export_table(t_rq4, "table_rq4_workload_experience", "Table 4. Workload and user experience by condition (RQ4)",
-                col_widths=[2.4, 1.8, 1.4, 1.8, 1.4, 2.0, 0.9], note="X = more explicit, I = more implicit. UEQ-S scored -3 to +3.")
+                col_widths=[2.8, 1.6, 0.6, 1.0, 0.9, 0.9, 1.0, 0.9], note="X = more explicit, I = more implicit. UEQ-S scored -3 to +3.")
 fig = pp.fig_paired(wide, pl.RQ_MEASURES["RQ4"], "Workload and user experience by condition (RQ4)", ncols=4)
 pp.save_fig(fig, "fig_rq4_workload_experience"); plt.show()
 """)
@@ -331,7 +396,9 @@ sub = pl.describe_by_condition(long, wide, pl.TLX_COLS)
 sub["label"] = sub["label"].str.replace("Performance", "Performance*")
 t_sub = pl.format_descriptives(sub.assign(unit="0-100"))
 display(t_sub)
-pp.export_table(t_sub, "table_rq4_tlx_subscales", "NASA-TLX subscales by condition", col_widths=[2.4, 1.8, 1.4, 1.8, 1.4, 2.0, 0.9],
+dir_sub = pl.format_directions(sub); display(dir_sub)
+pp.export_table(dir_sub, "table_rq4_tlx_subscales_directions", "Paired direction counts", col_widths=[3.2, 0.9, 1.3, 1.3, 0.9], font=10)
+pp.export_table(t_sub, "table_rq4_tlx_subscales", "NASA-TLX subscales by condition", col_widths=[2.8, 1.6, 0.6, 1.0, 0.9, 0.9, 1.0, 0.9],
                 note="*Performance: 0 = perfect, 100 = failure.")
 """)
 code(r"""
@@ -377,11 +444,12 @@ code(r"""
 cols = ["completion_time_sec", "wayfinding_errors", "lost_episodes"]
 by_pos = pl.describe_by_group(long, "trial_position", cols)
 by_route = pl.describe_by_group(long, "route_id", cols)
-for name, t in (("By trial position (median [min, max])", by_pos), ("By route (median [min, max])", by_route)):
+for name, t in (("By trial position", by_pos), ("By route", by_route)):
     print(name); display(t)
-nice = {"completion_time_sec": "Completion time (s)", "wayfinding_errors": "Errors", "lost_episodes": "Lost episodes"}
-pp.export_table(by_pos.rename(columns=nice), "table_by_trial_position", "Median [min, max] by trial position and condition", col_widths=[1.2, 1.3, 0.6, 2.0, 1.6, 1.8], font=9)
-pp.export_table(by_route.rename(columns=nice), "table_by_route", "Median [min, max] by route and condition", col_widths=[1.2, 1.3, 0.6, 2.0, 1.6, 1.8], font=9)
+hdr = {"condition": "Condition", "trial_position": "Trial position", "route_id": "Route", "measure": "Measure", "n": "n",
+       "median": "Median", "min": "Min", "max": "Max", "mean": "Mean", "sd": "SD"}
+pp.export_table(by_pos.rename(columns=hdr), "table_by_trial_position", "Trial position: median, min, max, mean and SD", col_widths=[1.1, 1.1, 2.0, 0.5, 0.9, 0.8, 0.8, 0.9, 0.8], font=9)
+pp.export_table(by_route.rename(columns=hdr), "table_by_route", "Route: median, min, max, mean and SD", col_widths=[1.1, 1.1, 2.0, 0.5, 0.9, 0.8, 0.8, 0.9, 0.8], font=9)
 fig = pp.fig_order_route(long)
 pp.save_fig(fig, "fig_order_route"); plt.show()
 """)
@@ -410,16 +478,18 @@ Two researchers independently code the transcripts following Braun and Clarke's 
 code(r"""
 cb = counts.copy()
 cb["Group"] = cb["group"]; cb["Code"] = cb["label"]
-cb["Participants X / I"] = cb["participants_X"].astype(str) + " / " + cb["participants_I"].astype(str)
-cb["Segments X / I"] = cb["segments_X"].astype(str) + " / " + cb["segments_I"].astype(str)
-cb = cb.sort_values(["family", "Group", "participants_I"], ascending=[True, True, False])[["Group", "Code", "Participants X / I", "Segments X / I"]]
+cb = cb.rename(columns={"participants_X": "Participants X", "participants_I": "Participants I",
+                        "segments_X": "Segments X", "segments_I": "Segments I"})
+cb = cb.sort_values(["family", "Group", "Participants I"], ascending=[True, True, False])[
+    ["Group", "Code", "Participants X", "Participants I", "Segments X", "Segments I"]]
 display(cb)
-pp.export_table(cb, "table_codebook_counts", f"Interview codes (n = {len(clean.participants)} participants)", col_widths=[2.6, 3.0, 1.8, 1.6], font=9)
+pp.export_table(cb, "table_codebook_counts", f"Interview codes (n = {len(clean.participants)} participants)", col_widths=[2.6, 3.0, 1.0, 1.0, 1.0, 1.0], font=9)
 themes = pl.theme_participants(interviews)
-t_themes = themes.assign(**{"Participants X / I": themes["participants_X"].astype(str) + " / " + themes["participants_I"].astype(str),
-                            "Segments X / I": themes["segments_X"].astype(str) + " / " + themes["segments_I"].astype(str)})[["Theme", "Codes", "Participants X / I", "Segments X / I"]]
+t_themes = themes.rename(columns={"participants_X": "Participants X", "participants_I": "Participants I",
+                                  "segments_X": "Segments X", "segments_I": "Segments I"})[
+    ["Theme", "Codes", "Participants X", "Participants I", "Segments X", "Segments I"]]
 display(t_themes)
-pp.export_table(t_themes, "table_themes", "Candidate themes (placeholders until coding is finished)", col_widths=[3.0, 3.6, 1.6, 1.5], wrap=46, font=9)
+pp.export_table(t_themes, "table_themes", "Candidate themes (placeholders until coding is finished)", col_widths=[3.0, 3.6, 1.0, 1.0, 1.0, 1.0], wrap=46, font=9)
 """)
 
 # ---- 5.8 integration
@@ -428,6 +498,8 @@ md(r"""
 For each of RQ2 to RQ4: the descriptive pattern, the supporting or contradicting interview themes, and the related work. A pattern with no coded theme is reported as **unexplained**; an interview theme with no counterpart in the numbers would be reported the same way.
 """)
 code(r"""
+dir_all = pd.concat([dir_rq2, dir_rq3, dir_rq4]).reset_index(drop=True)
+pp.export_table(dir_all, "table_directions_all", "Paired direction counts, all measures", col_widths=[3.2, 0.9, 1.3, 1.3, 0.9], font=10)
 desc_all = pl.describe_by_condition(long, wide, all_measures)
 jd = pl.joint_display(desc_all, themes)
 for _, r in jd.iterrows():
@@ -486,7 +558,7 @@ md(r"""
 (2) formula tests against values computed by hand (active time, cap, NASA-TLX, UEQ-S scoring incl. reversed items, differences, direction counts); (3) statistical checks (Cohen's kappa against scikit-learn, Holm correction against known values, bootstrap reproducibility);
 (4) end-to-end tests on the dummy files: **every injected fault must be detected**, row counts, ranges and types hold, cleaning is **idempotent** (cleaning clean data changes nothing), the pipeline and generator are deterministic.
 
-`mutation_check.py` then breaks `pipeline.py` on purpose in 12 places (changed cap, wrong TLX divisor, wrong UEQ-S offset, flipped difference sign, off-by-one boundaries, broken Holm step ...) and confirms the suite fails every time (12 of 12 mutants killed).
+`mutation_check.py` then breaks `pipeline.py` on purpose in 17 places (changed cap, wrong TLX divisor, wrong UEQ-S offset, flipped difference sign, off-by-one boundaries, broken Holm step ...) and confirms the suite fails every time (17 of 17 mutants killed).
 """)
 code(r"""
 res = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_pipeline.py"],
@@ -532,6 +604,29 @@ for t, q in clean.quarantine.items():
     q.to_csv(OUT["processed"] / f"quarantine_{t}.csv", index=False)
 for t, df in clean.tables.items():
     df.drop(columns=["_row"], errors="ignore").to_csv(OUT["processed"] / f"clean_{t}.csv", index=False)
+
+desc_all = pl.describe_by_condition(long, wide, list(pl.MEASURES) + pl.TLX_COLS + ["map_time_share"])
+theme_keys = {"Marker-led following": "thMarker", "Interpreting clues with the environment": "thClue",
+              "Map and compass as fallback": "thFallback", "Getting lost and recovering": "thLost",
+              "Effort versus immersion": "thEffort"}
+extra = {}
+for _, r in t_themes.iterrows():
+    k = theme_keys[r["Theme"]]
+    extra.update({f"{k}PX": int(r["Participants X"]), f"{k}PI": int(r["Participants I"]),
+                  f"{k}SX": int(r["Segments X"]), f"{k}SI": int(r["Segments I"])})
+# cleaning-log counts and order/route medians for the paper's text
+lg = clean.log.to_frame()
+act = lg["action"].value_counts()
+extra.update({"cleanTotal": len(lg), "cleanRepaired": int(act.get("repaired", 0)), "cleanSetMissing": int(act.get("set_missing", 0)),
+              "cleanQuarantined": int(act.get("quarantined", 0)), "cleanFlagged": int(act.get("flagged", 0))})
+short = {"Completion time": "ct", "Wayfinding errors": "er", "Lost episodes": "lo"}
+for tbl, grp, names in ((by_pos, "trial_position", {"1": "PosOne", "2": "PosTwo"}),
+                        (by_route, "route_id", {"Route_A": "RouteA", "Route_B": "RouteB"})):
+    for _, r in tbl.iterrows():
+        extra[f"{short[r['measure']]}Med{'X' if r['condition'] == 'Explicit' else 'I'}{names[str(r[grp])]}"] = pl.fmt_num(r["median"], 1)
+macros = pl.paper_macros(desc_all, diffs, pl.completion_table(long), rs, clean.participants, extra, dummy=IS_DUMMY)
+(OUT["tables"] / "paper_numbers.tex").write_text(macros, encoding="utf-8")
+print(f"{macros.count(chr(10))} lines of LaTeX macros written to tables/paper_numbers.tex (the paper reads its numbers from here)")
 
 sha = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()[:16] for p in sorted(DATA_DIR.glob(f"*{SUFFIX}.csv"))}
 display(pd.Series(sha, name="SHA-256 (first 16)").to_frame())
