@@ -79,8 +79,48 @@ INJECTED_FAULTS = [
     ("trials", "P14", "completed:boolean", "'No' / 'TRUE' spellings in completed"),
     ("questionnaires", "P15", "na_token", "UEQ-S item 3 left as '-'"),
     ("trials", "P16", "pause>=elapsed", "pause longer than the whole trial"),
+    ("trials", "P12", "end_time<=start_time", "end timecode typed earlier than the start timecode"),
     ("questionnaires", "P17", "unknown_or_excluded_participant", "questionnaire for an unregistered ID"),
     ("participants", "P16", "gender:category", "gender typed 'woman' in lowercase"),
+    ("participants", "P11", "weekly_gaming_hours:out_of_range", "weekly gaming hours typed 1000 (a week has 168 h)"),
+    ("trials", "P09", "map_openings>elapsed", "map openings typed 500 in a trial of about 3 minutes"),
+]
+
+# Every generator setting and what it is based on. Nothing below is a measurement: these are design
+# assumptions, anchored where possible to the hand-entered rows P01-P08 and to the protocol, and
+# chosen so the dummy set exercises every table and figure. They carry no evidential weight.
+DUMMY_BASIS = [
+    ("Active time, more explicit", "N(200, 22) s + participant offset N(0, 18)",
+     "Protocol: a route takes about 3 min. Hand-entered P01-P08: mean active time about 193 s under X."),
+    ("Active time, more implicit", "N(305, 38) s + same participant offset",
+     "About 1.5 times the explicit time. Hand-entered P01-P08: median about 270 s plus one timeout at the 480 s cap."),
+    ("Learning and route effects", "Trial 2 is 4% faster; Route B is 6 s slower",
+     "Assumed small effects so the order and route checks have something to display."),
+    ("Combat and cutscene pauses", "Uniform integer 15-40 s", "Hand-entered P01-P08 pauses range from 15 to 40 s."),
+    ("Start timecode", "Uniform integer 8-25 s into the recording",
+     "Time between pressing record and the start signal; elapsed time is end minus start, never typed."),
+    ("Wayfinding errors", "Poisson(0.7) explicit, Poisson(2.2) implicit, capped at 4",
+     "Hand-entered P01-P08 means: about 0.6 (X) and 2.6 (I). The cap equals the placeholder D = 4."),
+    ("Lost episodes", "0.65 per error under implicit, none under explicit, plus noise",
+     "A player who takes wrong branches is more likely to be lost; hand-entered P01-P08 follow this."),
+    ("Map openings", "N(2, 1) explicit, N(5, 1) implicit, plus 0.4 per error",
+     "Hand-entered P01-P08: 1-3 (X) and 4-8 (I)."),
+    ("Map open time", "14-22 s per opening, plus 15 s under implicit",
+     "Hand-entered P01-P08: 19-48 s (X) and 92-190 s (I)."),
+    ("Objective-board openings", "N(1.3, 0.7) explicit, N(3.4, 0.7) implicit",
+     "Hand-entered P01-P08: 1-2 (X) and 3-6 (I)."),
+    ("NASA-TLX subscales", "Centres 15-33 explicit and 32-68 implicit, SD 5-8, rounded to 5",
+     "Hand-entered P01-P08 subscale means: 16-34 (X) and 32-68 (I). The 0-100 scale and rounding to 5 follow the form."),
+    ("UEQ-S items", "N(5.6, 0.7) explicit, N(3.5, 0.7) implicit, clipped to 1-7",
+     "Hand-entered P01-P08: item means about 5.5 (X) and 3.5 (I)."),
+    ("Participant background", "Age 19-25, 3-15 gaming hours per week, 2+ years of play",
+     "University students who play games (screening rules); hand-entered P01-P08 fall in these ranges."),
+    ("Second coder", "6% flipped error codes; counts differ by at most 1 with probability 0.4",
+     "Assumed to give agreement statistics something to report; a quarter of participants (4 of 16), as in the protocol."),
+    ("Interview codes", "Per-code probabilities by condition (explicit: marker 0.95, implicit: map 0.90, ...)",
+     "Assumed so that the code table is populated; excerpts are the literal text '[dummy] ...', not quotations."),
+    ("Injected data-entry faults", "13 faults across the four tables (see INJECTED_FAULTS)",
+     "Deliberate, so the cleaning rules can be shown detecting each one."),
 ]
 
 CODES_SOURCE = ["marker", "compass", "map", "clue_text", "landmarks_terrain", "lighting_colour", "character_clues"]
@@ -96,6 +136,32 @@ EXCERPTS = {
     "more_effortful": "[dummy] had to think harder", "more_immersive": "[dummy] felt more immersed",
     "frustrating": "[dummy] got frustrated",
 }
+
+
+def _clock(sec: int) -> str:
+    """Seconds -> recording timecode H:MM:SS."""
+    return f"{sec // 3600}:{(sec % 3600) // 60:02d}:{sec % 60:02d}"
+
+
+def _clock_to_sec(s: str) -> int:
+    h, m, x = (["0"] + s.split(":"))[-3:]
+    return int(h) * 3600 + int(m) * 60 + int(x)
+
+
+def _to_timecodes(trials: pd.DataFrame) -> pd.DataFrame:
+    """The researcher reads start and end timecodes off the screen recording; elapsed time is NOT
+    entered by hand, the pipeline computes it as end - start. The start offset (the moment the start
+    signal is given, 8-25 s into the recording) comes from its own seeded stream so the other
+    random draws are unchanged."""
+    r = np.random.default_rng(SEED + 1)
+    starts = r.integers(8, 26, size=len(trials))
+    out = trials.copy()
+    out["start_time"] = [_clock(int(s)) for s in starts]
+    out["end_time"] = [_clock(int(s) + int(e)) for s, e in zip(starts, out["elapsed_time_sec"])]
+    cols = [c for c in out.columns if c != "elapsed_time_sec"]
+    i = cols.index("trial_position") + 1
+    cols = cols[:i] + ["start_time", "end_time"] + [c for c in cols[i:] if c not in ("start_time", "end_time")]
+    return out[cols]
 
 
 def _round5(x):
@@ -166,6 +232,7 @@ def build(clean: bool = False):
     parts = pd.concat([parts, pd.DataFrame(new_p).astype(str)], ignore_index=True)
     trials = pd.concat([trials, pd.DataFrame(new_t).astype(str)], ignore_index=True)
     quest = pd.concat([quest, pd.DataFrame(new_q).astype(str)], ignore_index=True)
+    trials = _to_timecodes(trials)
 
     # ---- second coder: random quarter of participants (n/4 = 4) -------------
     pids = list(parts["participant_id"])
@@ -231,8 +298,13 @@ def _inject_faults(parts, trials, quest):
     trials.loc[m & (trials.condition == "Explicit"), "completed"] = "TRUE"
     quest.loc[(quest.participant_id == "P15") & (quest.condition == "Implicit"), "ueqs_item3_raw_1_to_7"] = "-"
     i = trials.index[(trials.participant_id == "P16") & (trials.trial_position == "2")][0]
-    trials.loc[i, "combat_cutscene_pause_sec"] = str(int(trials.loc[i, "elapsed_time_sec"]) + 20)
+    el = _clock_to_sec(trials.loc[i, "end_time"]) - _clock_to_sec(trials.loc[i, "start_time"])
+    trials.loc[i, "combat_cutscene_pause_sec"] = str(el + 20)
+    j = trials.index[(trials.participant_id == "P12") & (trials.trial_position == "1")][0]
+    trials.loc[j, "start_time"], trials.loc[j, "end_time"] = trials.loc[j, "end_time"], trials.loc[j, "start_time"]
     parts.loc[parts.participant_id == "P16", "gender"] = "woman"
+    parts.loc[parts.participant_id == "P11", "weekly_gaming_hours"] = "1000"
+    trials.loc[(trials.participant_id == "p9") & (trials.trial_position == "1"), "map_openings"] = "500"
 
 
 def main():
