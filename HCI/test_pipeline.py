@@ -41,7 +41,20 @@ def _pair(pid="P01", first=("Explicit", "Route_A"), **kw):
 
 
 def _df(rows):
-    return pd.DataFrame(rows).astype(str)
+    """Hand-built rows may give `el` (elapsed seconds); the raw file holds start/end timecodes, so
+    convert with a fixed 10 s start offset. The pipeline must recover `el` as end - start."""
+    out = []
+    for r in rows:
+        r = dict(r)
+        if "elapsed_time_sec" in r:
+            el = r.pop("elapsed_time_sec")
+            r["start_time"] = gen._clock(10)
+            try:
+                r["end_time"] = gen._clock(10 + int(float(el)))
+            except (TypeError, ValueError):
+                r["end_time"] = str(el)
+        out.append(r)
+    return pd.DataFrame(out).astype(str)
 
 
 def _clean_trials(rows, ids=("P01", "P02", "P03")):
@@ -132,8 +145,6 @@ def test_trials_conflicting_duplicates_are_quarantined_not_guessed():
 
 
 @pytest.mark.parametrize("field,val,rule", [
-    ("elapsed_time_sec", "abc", "elapsed_time_sec:non_numeric"),
-    ("elapsed_time_sec", "-5", "elapsed_time_sec:out_of_range"),
     ("wayfinding_errors", "2.5", "wayfinding_errors:non_integer"),
     ("wayfinding_errors", "-1", "wayfinding_errors:out_of_range"),
     ("map_openings", "x", "map_openings:non_numeric"),
@@ -305,10 +316,45 @@ def test_participants_conflicting_duplicate_ids_quarantined():
     assert out.empty and "conflicting_duplicate_participant" in rules(log)
 
 
-def test_participants_implausible_values_flagged_not_changed():
-    out, log, _ = _clean_parts([{**BASE_P, "weekly_gaming_hours": 90, "age": 45, "years_of_gaming": 10}])
-    assert {"weekly_gaming_hours>80", "age>40"} <= rules(log)
-    assert out.iloc[0]["weekly_gaming_hours"] == 90
+def test_unusual_background_values_are_flagged_relative_to_the_sample_and_kept():
+    rows = [{**BASE_P, "participant_id": f"P{i:02d}", "weekly_gaming_hours": h}
+            for i, h in enumerate([6, 7, 8, 8, 9, 10, 9, 140], start=1)]
+    out, log, _ = _clean_parts(rows)
+    hit = log[log["rule"] == "weekly_gaming_hours:outlier"]
+    assert list(hit["participant_id"]) == ["P08"] and (out["weekly_gaming_hours"] == 140).sum() == 1
+
+
+def test_no_fixed_cutoff_flags_a_typical_sample():
+    rows = [{**BASE_P, "participant_id": f"P{i:02d}", "weekly_gaming_hours": h, "age": a}
+            for i, (h, a) in enumerate([(5, 20), (10, 22), (80, 45), (60, 41), (8, 21), (70, 43)], start=1)]
+    _, log, _ = _clean_parts(rows)
+    assert not any(r.endswith(":outlier") for r in rules(log))       # 80 h and age 45 are not suspicious per se
+
+
+@pytest.mark.parametrize("field,val,ok", [("weekly_gaming_hours", 168, True), ("weekly_gaming_hours", 168.5, False),
+                                          ("weekly_gaming_hours", 0, True), ("weekly_gaming_hours", -1, False),
+                                          ("age", 122, True), ("age", 123, False)])
+def test_participant_hard_limits_are_exact(field, val, ok):
+    extra = {"years_of_gaming": 3} if field == "age" else {}
+    out, log, _ = _clean_parts([{**BASE_P, field: val, **extra}])
+    assert (f"{field}:out_of_range" not in rules(log)) == ok
+
+
+def test_years_of_gaming_may_equal_age_but_not_exceed_it():
+    ok, lg1, _ = _clean_parts([{**BASE_P, "age": 20, "years_of_gaming": 20}])
+    no, lg2, _ = _clean_parts([{**BASE_P, "age": 20, "years_of_gaming": 21}])
+    assert "years_of_gaming>age" not in rules(lg1) and "years_of_gaming>age" in rules(lg2)
+
+
+@pytest.mark.parametrize("col,kw", [("lost_episodes", "lost"),
+                                    ("map_openings", "maps"), ("objective_board_openings", "board")])
+def test_count_cannot_exceed_seconds_in_trial(col, kw):
+    lg_ok, lg_bad = pl.IssueLog(), pl.IssueLog()
+    # 100 s elapsed with no pauses: 100 events is the most that fits, 101 cannot
+    ok = pl.clean_trials(_df(_pair(el=100, pause=0, mdur=0, **{kw: 100})), {"P01"}, lg_ok, {})
+    bad = pl.clean_trials(_df(_pair(el=100, pause=0, mdur=0, **{kw: 101})), {"P01"}, lg_bad, {})
+    assert f"{col}>elapsed" not in rules(lg_ok.to_frame()) and f"{col}>elapsed" in rules(lg_bad.to_frame())
+    assert bad[col].isna().all() and ok[col].notna().all()
 
 
 # ---- questionnaires --------------------------------------------------------
@@ -596,7 +642,8 @@ def test_missing_values_only_where_faults_were_injected(run):
     found = {(p, str(c), col) for (p, c), row in na.iterrows() for col in cols if row[col]}
     expected = {("P16", "Implicit", "completion_time_sec"), ("P16", "Explicit", "completion_time_sec"),
                 ("P13", "Implicit", "map_open_duration_sec"), ("P12", "Explicit", "nasa_tlx_raw"),
-                ("P15", "Implicit", "ueqs_overall"), ("P15", "Implicit", "ueqs_pragmatic")}
+                ("P15", "Implicit", "ueqs_overall"), ("P15", "Implicit", "ueqs_pragmatic"),
+                    ("P12", "Implicit", "completion_time_sec"), ("P09", "Explicit", "map_openings")}
     assert found <= expected, found - expected
     assert ("P12", "Explicit", "nasa_tlx_raw") in found and ("P15", "Implicit", "ueqs_overall") in found
 
@@ -661,7 +708,8 @@ def test_group_tables_cover_every_trial(run):
     _, _, long, _ = run
     for g in ("trial_position", "route_id"):
         t = pl.describe_by_group(long, g, ["completion_time_sec"])
-        assert t["n"].sum() == len(long)
+        assert t["n"].sum() == long["completion_time_sec"].notna().sum()
+        assert {"median", "min", "max", "mean", "sd"} <= set(t.columns)      # one column per statistic
 
 
 def test_pipeline_is_deterministic(dummy_dir):
@@ -679,7 +727,12 @@ def test_generator_is_deterministic():
 def test_original_p01_p08_rows_preserved_verbatim():
     parts, trials, quest, _, _ = gen.build(clean=True)
     orig = pd.read_csv(io.StringIO(gen.ORIG_TRIALS), dtype=str)
-    pd.testing.assert_frame_equal(trials.iloc[: len(orig)].reset_index(drop=True), orig)
+    got = trials.iloc[: len(orig)].reset_index(drop=True)
+    # elapsed time is no longer typed: it must be recoverable as end - start from the timecodes
+    el = (got["end_time"].map(gen._clock_to_sec) - got["start_time"].map(gen._clock_to_sec)).astype(str)
+    assert list(el) == list(orig["elapsed_time_sec"])
+    pd.testing.assert_frame_equal(got.drop(columns=["start_time", "end_time"]),
+                                  orig.drop(columns=["elapsed_time_sec"]))
 
 
 def test_notebook_pipeline_importable_without_side_effects():
@@ -749,3 +802,137 @@ def test_outlier_flagged_just_above_threshold():
 def test_value_below_threshold_not_flagged():
     # z = 0.6745 * 8 / 2 = 2.70 < 3.5
     assert _outlier_flags(12).empty
+
+
+# ---- timecodes: elapsed time is computed, not typed -------------------------------------------
+@pytest.mark.parametrize("raw,exp", [("3:25", 205), ("0:03:25", 205), ("00:03:25", 205), ("1:00:00", 3600),
+                                     ("0:00", 0), ("3:60", None), ("abc", None), ("", None), (None, None),
+                                     ("3.25", None), ("3:5", None)])
+def test_parse_clock(raw, exp):
+    got = pl.parse_clock(raw)
+    assert got == exp
+
+
+def test_elapsed_is_end_minus_start():
+    rows = _pair()
+    rows[0].update(start_time=None)
+    df = _df(rows)
+    df.loc[0, ["start_time", "end_time"]] = ["0:00:20", "0:03:45"]
+    out, log, _ = pl.clean_trials(df, {"P01"}, pl.IssueLog(), {}), None, None
+    assert out.iloc[0]["elapsed_time_sec"] == 205 and out.iloc[0]["start_time_sec"] == 20
+
+
+def test_end_before_start_blanks_both_and_is_logged():
+    df = _df(_pair())
+    df.loc[0, ["start_time", "end_time"]] = ["0:03:45", "0:00:20"]
+    lg, store = pl.IssueLog(), {}
+    out = pl.clean_trials(df, {"P01"}, lg, store)
+    assert "end_time<=start_time" in rules(lg.to_frame()) and np.isnan(out.iloc[0]["elapsed_time_sec"])
+
+
+def test_equal_start_and_end_is_invalid_but_one_second_is_valid():
+    for end, ok in (("0:00:10", False), ("0:00:11", True)):
+        df = _df(_pair(pause=0))
+        df.loc[0, "end_time"] = end
+        lg = pl.IssueLog()
+        out = pl.clean_trials(df, {"P01"}, lg, {})
+        assert (not np.isnan(out.iloc[0]["elapsed_time_sec"])) == ok
+
+
+def test_bad_timecode_text_is_set_missing():
+    df = _df(_pair())
+    df.loc[0, "start_time"] = "ten seconds"
+    lg = pl.IssueLog()
+    out = pl.clean_trials(df, {"P01"}, lg, {})
+    assert "start_time:format" in rules(lg.to_frame()) and np.isnan(out.iloc[0]["elapsed_time_sec"])
+
+
+# ---- presentation tables: every statistic in its own column, one precision ---------------------
+def test_format_descriptives_has_separate_aligned_columns(run):
+    _, _, long, wide = run
+    d = pl.describe_by_condition(long, wide, ["completion_time_sec", "wayfinding_errors"])
+    f = pl.format_descriptives(d)
+    assert list(f.columns) == ["Measure", "Condition", "n", "Median", "Min", "Max", "Mean", "SD"]
+    assert len(f) == 4
+    assert all(pd.api.types.is_numeric_dtype(f[c]) for c in ["n", "Median", "Min", "Max", "Mean", "SD"])
+    assert (f["Min"] <= f["Median"]).all() and (f["Median"] <= f["Max"]).all()
+    assert (f["Min"] <= f["Mean"] + 1e-9).all() and (f["Mean"] <= f["Max"] + 1e-9).all()
+
+
+def test_format_directions_counts_add_up(run):
+    _, _, long, wide = run
+    d = pl.describe_by_condition(long, wide, ["completion_time_sec", "map_openings"])
+    f = pl.format_directions(d)
+    assert (f["Higher under X"] + f["Higher under I"] + f["Equal"] == f["Pairs"]).all()
+
+
+def test_participant_tables_cover_everyone(run):
+    clean, long = run[1], run[2]
+    n = len(clean.participants)
+    num = pl.participant_numeric_table(clean.participants)
+    cat = pl.participant_categorical_table(clean.participants)
+    cols = {"Age (years)": "age", "Gaming hours per week": "weekly_gaming_hours", "Years of gaming": "years_of_gaming"}
+    assert all(r["n"] == clean.participants[cols[r["Variable"]]].notna().sum() for _, r in num.iterrows())
+    assert list(num.columns)[:1] == ["Variable"]
+    for ch, g in cat.groupby("Characteristic"):
+        assert g["n"].sum() == n, ch
+        assert abs(g["Percent"].sum() - 100) < 0.2
+
+
+# ---- every documented parameter must equal the constant the code really uses --------------------
+def test_parameter_table_matches_the_code():
+    p = {r[0]: r[1] for r in pl.PARAMETERS}
+    assert p["TIME_CAP_SEC"] == pl.TIME_CAP_SEC == 480
+    assert p["ROUTE_DECISION_POINTS"] == pl.ROUTE_DECISION_POINTS["Route_A"] == pl.ROUTE_DECISION_POINTS["Route_B"]
+    import inspect
+    assert inspect.signature(pl.flag_outliers).parameters["threshold"].default == p["OUTLIER_MODIFIED_Z"]
+    assert inspect.signature(pl.bootstrap_ci).parameters["n_boot"].default == p["BOOTSTRAP_RESAMPLES"]
+    assert abs((1 - inspect.signature(pl.bootstrap_ci).parameters["alpha"].default) - p["CI_LEVEL"]) < 1e-12
+    assert "0.6745" in inspect.getsource(pl.flag_outliers) and p["OUTLIER_MAD_CONSTANT"] == 0.6745
+    assert "age\"] < 18" in inspect.getsource(pl.clean_participants) and p["MIN_AGE_YEARS"] == 18
+    assert p["HOURS_PER_WEEK"] == pl.HOURS_PER_WEEK == 24 * 7 and p["MAX_HUMAN_AGE"] == pl.MAX_HUMAN_AGE == 122
+    assert all(r[2] in {"Design", "Convention", "Placeholder", "Reproducibility", "Logic"} and r[3] for r in pl.PARAMETERS)
+
+
+def test_paper_macros_are_valid_latex_names_and_match_tables(run):
+    clean, long, wide = run[1], run[2], run[3]
+    d = pl.describe_by_condition(long, wide, list(pl.MEASURES))
+    df = pl.paired_differences(wide, list(pl.MEASURES), n_boot=200, seed=1)
+    rel = pl.reliability_summary(clean.tables["reliability"])
+    tex = pl.paper_macros(d, df, pl.completion_table(long), rel, clean.participants)
+    import re as _re
+    names = _re.findall(r"\\newcommand\{\\([^}]*)\}", tex)
+    assert names and len(names) == len(set(names))
+    assert all(_re.fullmatch(r"[A-Za-z]+", n) for n in names), [n for n in names if not _re.fullmatch(r"[A-Za-z]+", n)]
+    ct_x = d.loc[d.measure == "completion_time_sec", "median_X"].iloc[0]
+    assert f"\\newcommand{{\\ctMedX}}{{\\dm{{{pl.fmt_num(ct_x, 1)}}}}}" in tex
+    plain = pl.paper_macros(d, df, pl.completion_table(long), rel, clean.participants, dummy=False)
+    assert "\\dm{" not in plain and f"\\newcommand{{\\ctMedX}}{{{pl.fmt_num(ct_x, 1)}}}" in plain
+    assert "$-" in tex                                   # negative values use a typographic minus
+
+
+def test_rule_labels_are_readable(run):
+    log = run[1].log.to_frame()
+    for r in set(log["rule"]):
+        lab = pl.rule_label(r)
+        assert lab and "_" not in lab and ":" not in lab and ">" not in lab and "<" not in lab, (r, lab)
+    assert pl.rule_label("effort:out_of_range") == "Effort outside its allowed range"
+    assert pl.rule_label("participant_id:format") == "Participant ID in the wrong format"
+
+
+# ---- covariate outlier flag: pins the constant and the 3.5 threshold ---------------------------
+def _hours_flags(v):
+    rows = [{**BASE_P, "participant_id": f"P{i:02d}", "weekly_gaming_hours": h}
+            for i, h in enumerate([6, 7, 8, 8, 9, 10, 9, v], start=1)]
+    _, log, _ = _clean_parts(rows)
+    return log[log["rule"] == "weekly_gaming_hours:outlier"]
+
+
+def test_covariate_flag_just_above_threshold():
+    # median 8.5, MAD 1 -> modified z = 0.6745 * 6.5 = 4.38 (above 3.5, below 5)
+    assert list(_hours_flags(15)["participant_id"]) == ["P08"]
+
+
+def test_covariate_not_flagged_below_threshold():
+    # z = 0.6745 * 3.5 = 2.36
+    assert _hours_flags(12).empty
