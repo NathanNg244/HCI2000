@@ -2,14 +2,15 @@
 plots.py - figure functions for the results section.
 
 Design rules applied to every figure
-  * Colour-blind-safe palette (Okabe-Ito): blue = more explicit (X), vermillion =
-    more implicit (I). Colour always means condition, nothing else.
+  * Colour-blind-safe orange/blue pair, identical to the paper's TikZ figures:
+    orange = more explicit (X), blue = more implicit (I). Colour always means condition.
   * Every axis has a label with its unit; every panel states n (pairs).
   * Individual participants are shown (paired lines / dots), not only means.
   * A "DUMMY DATA" watermark is added while DUMMY_WATERMARK is True.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import matplotlib as mpl
@@ -22,7 +23,7 @@ from matplotlib.ticker import MaxNLocator
 import pipeline as pl
 
 DUMMY_WATERMARK = True
-C_X, C_I = "#0072B2", "#D55E00"           # explicit, implicit
+C_X, C_I = "#D9622B", "#2F6DB5"           # explicit = orange, implicit = blue (same colours as the paper figures)
 C_GREY, C_LIGHT = "#6b6b6b", "#d9d9d9"
 COLORS = {"Explicit": C_X, "Implicit": C_I}
 XLABELS = ["More explicit\n(X)", "More implicit\n(I)"]
@@ -56,6 +57,13 @@ def save_fig(fig, name, outdir=None):
     out.mkdir(parents=True, exist_ok=True)
     fig.savefig(out / f"{name}.png", bbox_inches="tight", facecolor="white")
     fig.savefig(out / f"{name}.pdf", bbox_inches="tight", facecolor="white")
+    # title-free copy for the paper: the LaTeX caption (below the figure) replaces the in-image title
+    st = getattr(fig, "_suptitle", None)
+    if st is not None and st.get_text():
+        st.set_visible(False)
+        (out / "paper").mkdir(exist_ok=True)
+        fig.savefig(out / "paper" / f"{name}.pdf", bbox_inches="tight", facecolor="white")
+        st.set_visible(True)
     return out / f"{name}.png"
 
 
@@ -347,7 +355,11 @@ def fig_table(df, title=None, col_widths=None, font=9, wrap=38, note=None):
                    colWidths=[w / sum(col_widths) for w in col_widths] if col_widths else None)
     tbl.auto_set_font_size(False)
     tbl.set_fontsize(font)
+    numeric = [pd.api.types.is_numeric_dtype(df[c]) for c in df.columns]
     for (r, c), cell in tbl.get_celld().items():
+        if r > 0 and numeric[c]:
+            cell.set_text_props(ha="right")
+            cell._loc = "right"
         cell.set_edgecolor("#d0d0d0")
         cell.PAD = 0.04
         if r == 0:
@@ -362,11 +374,46 @@ def fig_table(df, title=None, col_widths=None, font=9, wrap=38, note=None):
     return _finish(fig, None, note)
 
 
-def export_table(df, name, title=None, outdir="tables", image=True, **kw):
-    """Save a table as CSV (for the repo / LaTeX) and as a slide-ready PNG."""
+def _tex_escape(s):
+    for a, b in (("\\", r"\textbackslash{}"), ("&", r"\&"), ("%", r"\%"), ("_", r"\_"), ("#", r"\#"),
+                 ("$", r"\$"), ("<=", r"$\leq$"), (">=", r"$\geq$"), ("<", r"$<$"), (">", r"$>$")):
+        s = s.replace(a, b)
+    s = re.sub(r"(?<=\d)-(?=\d)", "--", s)              # numeric ranges use an en dash
+    return re.sub(r"(?<![\w$\-])-(?=\d)", "$-$", s)       # negative numbers use a minus sign
+
+
+def to_latex(df, digits=2, align=None):
+    """booktabs tabular body for the paper. Numeric columns are right-aligned and share one precision."""
+    cols = list(df.columns)
+    isnum = [pd.api.types.is_numeric_dtype(df[c]) for c in cols]
+    isint = [pd.api.types.is_integer_dtype(df[c]) or (isnum[i] and df[c].dropna().apply(float.is_integer).all()
+             and not str(df[c].name).lower() in ("median", "min", "max", "mean", "sd"))
+             for i, c in enumerate(cols)]
+
+    def cell(v, i):
+        if v is None or (isinstance(v, float) and np.isnan(v)):
+            return "--"
+        if isnum[i]:
+            s = f"{int(v)}" if isint[i] else f"{v:.{digits}f}"
+            return "$-$" + s[1:] if s.startswith("-") else s
+        return _tex_escape(str(v))
+
+    spec = align or "".join("r" if n else "l" for n in isnum)
+    lines = [r"\begin{tabular}{" + spec + "}", r"\toprule",
+             " & ".join(_tex_escape(str(c)) for c in cols) + r" \\", r"\midrule"]
+    for row in df.itertuples(index=False):
+        lines.append(" & ".join(cell(v, i) for i, v in enumerate(row)) + r" \\")
+    lines += [r"\bottomrule", r"\end{tabular}", ""]
+    return "\n".join(lines)
+
+
+def export_table(df, name, title=None, outdir="tables", image=True, latex=True, tex_align=None, **kw):
+    """Save a table as CSV, as a booktabs .tex body for the paper, and as a slide-ready PNG."""
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
     df.to_csv(out / f"{name}.csv", index=False)
+    if latex:
+        (out / f"{name}.tex").write_text(to_latex(df, align=tex_align), encoding="utf-8")
     if image:
         fig = fig_table(df, title, **kw)
         save_fig(fig, name, out)
