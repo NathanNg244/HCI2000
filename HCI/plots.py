@@ -2,8 +2,8 @@
 plots.py - figure functions for the results section.
 
 Design rules applied to every figure
-  * Colour-blind-safe orange/blue pair, identical to the paper's TikZ figures:
-    orange = more explicit (X), blue = more implicit (I). Colour always means condition.
+  * Colour-blind-safe crimson/indigo pair (shadow-and-blade palette), identical to the paper's TikZ figures:
+    crimson = more explicit (X), indigo = more implicit (I). Colour always means condition.
   * Every axis has a label with its unit; every panel states n (pairs).
   * Individual participants are shown (paired lines / dots), not only means.
   * A "DUMMY DATA" watermark is added while DUMMY_WATERMARK is True.
@@ -23,7 +23,7 @@ from matplotlib.ticker import MaxNLocator
 import pipeline as pl
 
 DUMMY_WATERMARK = True
-C_X, C_I = "#D9622B", "#2F6DB5"           # explicit = orange, implicit = blue (same colours as the paper figures)
+C_X, C_I = "#B3282D", "#2D3F7B"           # explicit = crimson, implicit = indigo (shadow-and-blade palette, same as the paper)
 C_GREY, C_LIGHT = "#6b6b6b", "#d9d9d9"
 COLORS = {"Explicit": C_X, "Implicit": C_I}
 XLABELS = ["More explicit\n(X)", "More implicit\n(I)"]
@@ -367,7 +367,7 @@ def fig_table(df, title=None, col_widths=None, font=9, wrap=38, note=None):
             cell.set_text_props(color="white", fontweight="bold")
             cell.set_height(0.3 * (max(h.count("\n") + 1 for h in heads)) / height)
         else:
-            cell.set_facecolor("#f4f6f8" if r % 2 == 0 else "white")
+            cell.set_facecolor("#f6f0e4" if r % 2 == 0 else "white")
             cell.set_height((0.27 * nlines[r - 1] + 0.1) / height)
     if title:
         ax.set_title(title, loc="left", fontweight="bold", fontsize=11)
@@ -380,6 +380,13 @@ def _tex_escape(s):
         s = s.replace(a, b)
     s = re.sub(r"(?<=\d)-(?=\d)", "--", s)              # numeric ranges use an en dash
     return re.sub(r"(?<![\w$\-])-(?=\d)", "$-$", s)       # negative numbers use a minus sign
+
+
+def _hdr(c):
+    """Column header for LaTeX: d_z and I-X are typeset as maths."""
+    c = c.replace("d_z", "@@DZ@@").replace("I-X", "@@IX@@")
+    c = _tex_escape(c)
+    return c.replace("@@DZ@@", "$d_z$").replace("@@IX@@", "I$-$X")
 
 
 def to_latex(df, digits=2, align=None):
@@ -399,8 +406,8 @@ def to_latex(df, digits=2, align=None):
         return _tex_escape(str(v))
 
     spec = align or "".join("r" if n else "l" for n in isnum)
-    lines = [r"\begin{tabular}{" + spec + "}", r"\toprule",
-             " & ".join(_tex_escape(str(c)) for c in cols) + r" \\", r"\midrule"]
+    lines = [r"\begin{tabular}{" + spec + "}", r"\toprule", r"\rowcolor{tablehead}",
+             " & ".join(r"\textbf{" + _hdr(str(c)) + "}" for c in cols) + r" \\", r"\midrule"]
     for row in df.itertuples(index=False):
         lines.append(" & ".join(cell(v, i) for i, v in enumerate(row)) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
